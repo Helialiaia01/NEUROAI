@@ -1,0 +1,19 @@
+# Virtual environments
+.venv/
+venv_cebra/
+
+# Data and caches
+xcebra_ibl/data_ibl_raw/
+xcebra_ibl/data_processed/
+__pycache__/
+*.npz
+*.npy
+*.pqt
+
+# External cloned repos
+repos/
+wandb/
+outputs/
+
+# OS files
+.DS_Store

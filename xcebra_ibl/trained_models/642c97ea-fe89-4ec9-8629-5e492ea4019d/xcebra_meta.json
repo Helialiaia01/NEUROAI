@@ -1,0 +1,17 @@
+{
+  "embedding_dim_per_group": 4,
+  "n_groups": 8,
+  "total_dim": 32,
+  "model_architecture": "offset10-model",
+  "max_iterations": 500,
+  "variable_names": [
+    "block",
+    "side",
+    "contrast_level",
+    "choice",
+    "outcome",
+    "wheel",
+    "whisker_max",
+    "lick"
+  ]
+}

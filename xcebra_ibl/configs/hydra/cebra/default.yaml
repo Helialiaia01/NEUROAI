@@ -1,0 +1,10 @@
+model_architecture: offset10-model
+max_iterations: 10000
+batch_size: 512
+learning_rate: 0.0003
+temperature: 1.0
+num_hidden_units: 128
+time_offsets: 10
+embedding_dim_per_group: 4
+method: per_variable
+n_attribution_samples: 2000
