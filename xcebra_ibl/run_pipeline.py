@@ -1,6 +1,6 @@
 """
 xCEBRA-IBL: Main Pipeline Execution Script
-==========================================
+=========================================
 
 Complete pipeline to apply xCEBRA to the IBL dataset and reproduce/extend
 the selectivity analysis from "Rarely Categorical" (Wang et al.).
