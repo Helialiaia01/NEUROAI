@@ -1,6 +1,7 @@
 """Kaggle entry point: clone the GitHub repo and run its real pipeline."""
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -28,19 +29,24 @@ def _find_dataset_dir():
 
 
 def main():
-    subprocess.run(["git", "clone", "--depth", "1", REPO, REPO_DIR], check=True)
-    subprocess.run(
-        [sys.executable, "-m", "pip", "install", "-r", f"{REPO_DIR}/requirements.txt"],
-        check=True,
-    )
+    try:
+        subprocess.run(["git", "clone", "--depth", "1", REPO, REPO_DIR], check=True)
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-r", f"{REPO_DIR}/requirements.txt"],
+            check=True,
+        )
 
-    os.environ["KAGGLE_INPUT_DIR"] = str(_find_dataset_dir())
-    os.environ["KAGGLE_WORKING_DIR"] = "/kaggle/working"
-    sys.path.insert(0, REPO_DIR)
+        os.environ["KAGGLE_INPUT_DIR"] = str(_find_dataset_dir())
+        os.environ["KAGGLE_WORKING_DIR"] = "/kaggle/working"
+        sys.path.insert(0, REPO_DIR)
 
-    from xcebra_ibl.kaggle_train import main as train_main
+        from xcebra_ibl.kaggle_train import main as train_main
 
-    train_main()
+        train_main()
+    finally:
+        # The cloned source tree is not an experiment artifact. Removing it
+        # before Kaggle packages /kaggle/working preserves disk for results.
+        shutil.rmtree(REPO_DIR, ignore_errors=True)
 
 
 if __name__ == "__main__":
