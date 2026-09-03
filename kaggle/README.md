@@ -8,7 +8,7 @@ GitHub repository at HEAD, installs `requirements.txt`, and runs the real
 The current IDs are:
 
 - Dataset: `helialiaia/ibl-xcebra-data`
-- Kernel: `helialiaia/xcebra-ibl-train`
+- Kernel: `helialiaia/xcebra-ibl-gpu-train`
 - GitHub repo: `https://github.com/Helialiaia01/NEUROAI.git`
 
 ## First upload

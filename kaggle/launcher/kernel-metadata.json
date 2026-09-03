@@ -1,5 +1,5 @@
 {
-  "id": "helialiaia/xcebra-ibl-train",
+  "id": "helialiaia/xcebra-ibl-gpu-train",
   "title": "xCEBRA IBL GPU Train",
   "code_file": "run_kaggle.py",
   "language": "python",

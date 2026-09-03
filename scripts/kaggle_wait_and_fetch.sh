@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-KERNEL="${KAGGLE_KERNEL_ID:-helialiaia/xcebra-ibl-train}"
+KERNEL="${KAGGLE_KERNEL_ID:-helialiaia/xcebra-ibl-gpu-train}"
 RESULTS_DIR="${KAGGLE_RESULTS_DIR:-results/kaggle}"
 
 while kaggle kernels status "$KERNEL" | grep -qiE 'queued|running|pulling|starting'; do
