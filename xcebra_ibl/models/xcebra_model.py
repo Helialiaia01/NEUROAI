@@ -83,6 +83,7 @@ class XCEBRAModel:
         device: str = "cuda_if_available",
         checkpoint_dir: Optional[str] = None,
         checkpoint_frequency: int = 1,
+        checkpoint_retention: Optional[int] = None,
     ):
         self.embedding_dim_per_group = embedding_dim_per_group
         self.n_groups = N_VARIABLES
@@ -97,6 +98,7 @@ class XCEBRAModel:
         self.device = device
         self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir else None
         self.checkpoint_frequency = checkpoint_frequency
+        self.checkpoint_retention = checkpoint_retention
 
         # Will be set during fit
         self.models_ = {}           # one CEBRA model per variable
@@ -110,6 +112,8 @@ class XCEBRAModel:
             return None
         if self.checkpoint_frequency < 1:
             raise ValueError("checkpoint_frequency must be at least 1")
+        if self.checkpoint_retention is not None and self.checkpoint_retention < 1:
+            raise ValueError("checkpoint_retention must be at least 1 or None")
 
         checkpoint_dir = self.checkpoint_dir
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -117,6 +121,10 @@ class XCEBRAModel:
         def save_checkpoint(num_steps, solver):
             filename = f"{prefix}_step_{num_steps:08d}.pt"
             solver.save(str(checkpoint_dir), filename)
+            if self.checkpoint_retention is not None:
+                checkpoints = sorted(checkpoint_dir.glob(f"{prefix}_step_*.pt"))
+                for old_checkpoint in checkpoints[:-self.checkpoint_retention]:
+                    old_checkpoint.unlink()
             print(f"  Saved mini-batch checkpoint: {checkpoint_dir / filename}")
 
         return save_checkpoint

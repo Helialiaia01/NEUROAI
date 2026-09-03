@@ -40,7 +40,10 @@ def _pipeline_args(argv=None):
         return shlex.split(configured)
     # The raw IBL dataset is already mounted; downloading from IBL is not part
     # of the Kaggle run. Users can override this with KAGGLE_PIPELINE_ARGS.
-    return ["--preprocess", "--train", "--analyze"]
+    # Streaming prevents Kaggle's small writable volume from filling with all
+    # preprocessed sessions. One checkpoint is attempted per mini-batch, while
+    # only the newest two are retained for safe recovery.
+    return ["--stream", "--analyze"]
 
 
 def main(argv=None):
@@ -69,7 +72,7 @@ def main(argv=None):
                 # exit successfully after printing a warning. Make that state
                 # visible to Kaggle as an error.
                 args = sys.argv[1:]
-                if "--train" in args or "--all" in args:
+                if "--train" in args or "--all" in args or "--stream" in args:
                     results_path = out_dir / "results" / "xcebra_neuron_results.json"
                     if not results_path.exists():
                         raise RuntimeError(

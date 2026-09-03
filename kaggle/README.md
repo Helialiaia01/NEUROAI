@@ -34,12 +34,16 @@ kaggle kernels push -p kaggle/launcher
 scripts/kaggle_wait_and_fetch.sh
 ```
 
-The default run performs preprocessing, per-variable training, and analysis.
+The default run uses the streaming pipeline: it preprocesses and trains one
+session at a time, writes resumable state to `results/streaming_state.json`,
+and appends neuron results to `results/xcebra_neuron_results.jsonl`. This
+keeps the raw dataset mounted read-only and avoids filling Kaggle's writable
+volume with all preprocessed sessions.
 For a smaller validation run, set the pipeline arguments before pushing a new
 kernel version, for example:
 
 ```bash
-export KAGGLE_PIPELINE_ARGS="--preprocess --train --analyze --n-attribution-samples 100 --max-iterations 100"
+export KAGGLE_PIPELINE_ARGS="--stream --analyze --limit-sessions 3 --n-attribution-samples 100 --max-iterations 100"
 ```
 
 Kaggle does not persist shell environment variables between runs. For a
@@ -47,8 +51,10 @@ repeatable non-default configuration, encode the value in the kernel's
 Secrets/environment setup or update the launcher before pushing.
 
 Outputs are written under `/kaggle/working`, including `train.log`, results,
-preprocessed caches, final trained model files, and a solver checkpoint after
-every CEBRA mini-batch under `trained_models/checkpoints/<eid>/`. Downloaded
-artifacts go to `results/kaggle` by the helper script. Set
-`checkpoint_frequency` in the model/training call if a less frequent local
-checkpoint cadence is needed.
+the streaming state, final trained model files, and checkpoints under
+`trained_models/checkpoints/<eid>/`. A checkpoint is attempted after every
+CEBRA mini-batch, but the Kaggle run retains only the newest two per model so
+checkpoint files cannot consume the worker volume. Set
+`--checkpoint-retention 0` only when using a storage backend with enough room
+for every checkpoint. Downloaded artifacts go to `results/kaggle` by the
+helper script.

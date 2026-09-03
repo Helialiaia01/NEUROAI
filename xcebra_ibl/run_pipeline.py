@@ -81,6 +81,34 @@ def run_train(
     return all_results, neuron_df
 
 
+def run_streaming_train(
+    method="per_variable",
+    max_iterations=None,
+    batch_size=None,
+    n_attribution_samples=2000,
+    checkpoint_frequency=1,
+    checkpoint_retention=2,
+    max_sessions=None,
+    wandb_run=None,
+    wandb_log_interval=50,
+):
+    """Preprocess/train sessions incrementally without a full-data cache."""
+    from xcebra_ibl.models.train import train_streaming_sessions
+
+    return train_streaming_sessions(
+        method=method,
+        max_iterations=max_iterations,
+        batch_size=batch_size,
+        n_attribution_samples=n_attribution_samples,
+        checkpoint_frequency=checkpoint_frequency,
+        checkpoint_retention=checkpoint_retention,
+        max_sessions=max_sessions,
+        wandb_run=wandb_run,
+        wandb_log_interval=wandb_log_interval,
+        verbose=True,
+    )
+
+
 def _log_analysis_to_wandb(wandb_run, analysis_results):
     """Log top-level analysis metrics and upload generated figures."""
     if analysis_results is None:
@@ -393,6 +421,11 @@ def main():
     parser.add_argument("--demo", action="store_true", help="Run demo with synthetic data")
     parser.add_argument("--all", action="store_true", help="Run full pipeline")
     parser.add_argument(
+        "--stream",
+        action="store_true",
+        help="Process and train one session at a time with resume support",
+    )
+    parser.add_argument(
         "--method", default="per_variable",
         choices=["per_variable", "joint"],
         help="xCEBRA training strategy",
@@ -412,6 +445,18 @@ def main():
     parser.add_argument(
         "--batch-size", type=int, default=None,
         help="Override CEBRA batch size for training",
+    )
+    parser.add_argument(
+        "--checkpoint-frequency", type=int, default=1,
+        help="Save a checkpoint every N mini-batches (default: every batch)",
+    )
+    parser.add_argument(
+        "--checkpoint-retention", type=int, default=2,
+        help="Retain only the newest N checkpoints per model; use 0 for unlimited",
+    )
+    parser.add_argument(
+        "--limit-sessions", type=int, default=None,
+        help="Process only the first N sessions (useful for smoke tests)",
     )
     parser.add_argument(
         "--n-attribution-samples", type=int, default=2000,
@@ -461,7 +506,10 @@ def main():
 
     args = parser.parse_args()
 
-    if not any([args.download, args.preprocess, args.train, args.analyze, args.demo, args.all]):
+    if not any([
+        args.download, args.preprocess, args.train, args.analyze,
+        args.demo, args.all, args.stream,
+    ]):
         parser.print_help()
         print("\n  Tip: Start with --demo to verify the pipeline works!")
         return
@@ -471,6 +519,30 @@ def main():
         return
 
     wandb_run = init_wandb_run(args)
+
+    if args.stream:
+        retention = None if args.checkpoint_retention == 0 else args.checkpoint_retention
+        neuron_df = run_streaming_train(
+            method=args.method,
+            max_iterations=args.max_iterations,
+            batch_size=args.batch_size,
+            n_attribution_samples=args.n_attribution_samples,
+            checkpoint_frequency=args.checkpoint_frequency,
+            checkpoint_retention=retention,
+            max_sessions=args.limit_sessions,
+            wandb_run=wandb_run,
+            wandb_log_interval=args.wandb_log_interval,
+        )
+        if args.analyze:
+            run_analyze(
+                neuron_df,
+                comparison_mode=args.comparison_mode,
+                wandb_run=wandb_run,
+            )
+        if wandb_run is not None:
+            wandb_run.finish()
+        print("\nStreaming xCEBRA pipeline complete")
+        return
 
     if args.all or args.download:
         run_download(n_areas=args.n_areas, n_sessions=args.n_sessions)

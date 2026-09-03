@@ -10,6 +10,8 @@ This replaces the RRR encoding model (step2_train_RRR.py from brainwide-RRR).
 import numpy as np
 import pickle
 import json
+import gc
+import traceback
 from pathlib import Path
 from tqdm import tqdm
 
@@ -18,7 +20,12 @@ from xcebra_ibl.configs.config import (
     VARIABLE_NAMES, N_VARIABLES, N_CV_FOLDS, TEST_FRACTION,
     MAX_ITERATIONS, BATCH_SIZE, EMBEDDING_DIM_PER_GROUP,
 )
-from xcebra_ibl.data.preprocess import load_preprocessed_sessions, build_neuron_dataframe
+from xcebra_ibl.data.preprocess import (
+    load_preprocessed_sessions,
+    build_neuron_dataframe,
+    preprocess_session,
+    _session_id,
+)
 from xcebra_ibl.models.xcebra_model import XCEBRAModel
 
 
@@ -102,6 +109,7 @@ def train_session_xcebra(
     wandb_log_interval=50,
     save_models=True,
     checkpoint_frequency=1,
+    checkpoint_retention=None,
     verbose=True,
 ):
     """
@@ -159,6 +167,7 @@ def train_session_xcebra(
         batch_size=min(batch_size, K * T),
         checkpoint_dir=MODELS_DIR / "checkpoints" / eid,
         checkpoint_frequency=checkpoint_frequency,
+        checkpoint_retention=checkpoint_retention,
         **model_kwargs,
     )
 
@@ -212,6 +221,208 @@ def train_session_xcebra(
         )
 
     return result
+
+
+def _neuron_rows(session_data, result):
+    """Convert one session result into JSON-serializable neuron rows."""
+    meta = session_data["metadata"]
+    attr = result["attribution_maps"]
+    rows = []
+    for ni in range(result["N"]):
+        row = {
+            "eid": result["eid"],
+            "ni": ni,
+            "uuids": meta["uuids"][ni] if len(meta["uuids"]) > ni else "",
+            "acronym": meta["acronym"][ni] if len(meta["acronym"]) > ni else "",
+            "mfr_task": float(meta["firing_rate"][ni])
+            if len(meta["firing_rate"]) > ni
+            else 0.0,
+        }
+        for var_name in VARIABLE_NAMES:
+            row[f"xcebra_attr_{var_name}"] = (
+                float(attr[var_name][ni]) if var_name in attr else 0.0
+            )
+        rows.append(row)
+    return rows
+
+
+def _write_json(path, payload):
+    """Atomically write a small JSON state file."""
+    path = Path(path)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    with temporary.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2, sort_keys=True)
+    temporary.replace(path)
+
+
+def train_streaming_sessions(
+    data_dir=None,
+    results_dir=None,
+    method="per_variable",
+    max_iterations=None,
+    batch_size=None,
+    n_attribution_samples=2000,
+    checkpoint_frequency=1,
+    checkpoint_retention=2,
+    max_sessions=None,
+    wandb_run=None,
+    wandb_log_interval=50,
+    save_models=True,
+    verbose=True,
+):
+    """Preprocess and train sessions one at a time with resumable state.
+
+    This is the production path for constrained runtimes such as Kaggle. It
+    never stores the full preprocessed dataset or all trained model objects in
+    memory. Results are appended as JSONL and a small state file records which
+    sessions completed or were skipped.
+    """
+    from xcebra_ibl.configs.config import DATA_RAW_DIR, RESULTS_DIR
+
+    data_dir = Path(data_dir) if data_dir is not None else DATA_RAW_DIR
+    results_dir = Path(results_dir) if results_dir is not None else RESULTS_DIR
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    result_jsonl = results_dir / "xcebra_neuron_results.jsonl"
+    result_json = results_dir / "xcebra_neuron_results.json"
+    state_path = results_dir / "streaming_state.json"
+
+    state = {"version": 1, "sessions": {}}
+    if state_path.exists():
+        with state_path.open("r", encoding="utf-8") as handle:
+            state = json.load(handle)
+        state.setdefault("sessions", {})
+
+    # If a prior run was interrupted after appending rows but before updating
+    # state, use the JSONL file as an additional resume signal.
+    completed = {
+        eid
+        for eid, info in state["sessions"].items()
+        if info.get("status") in {"complete", "skipped"}
+    }
+    if result_jsonl.exists():
+        with result_jsonl.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                if line.strip():
+                    completed.add(json.loads(line)["eid"])
+
+    npz_files = sorted(data_dir.rglob("*.npz"))
+    if max_sessions is not None:
+        npz_files = npz_files[:max_sessions]
+    if not npz_files:
+        raise FileNotFoundError(f"No .npz session files found under {data_dir}")
+
+    print(
+        f"Streaming {len(npz_files)} sessions; "
+        f"already complete/skipped: {len(completed)}"
+    )
+
+    for npz_path in tqdm(npz_files, desc="Streaming xCEBRA sessions"):
+        eid = _session_id(npz_path)
+        if eid in completed:
+            continue
+
+        state["sessions"][eid] = {
+            "status": "processing",
+            "source": str(npz_path.name),
+        }
+        _write_json(state_path, state)
+
+        session_data = None
+        try:
+            session_data = preprocess_session(npz_path, verbose=verbose)
+            if session_data is None:
+                state["sessions"][eid] = {
+                    "status": "skipped",
+                    "source": str(npz_path.name),
+                    "reason": "preprocessing_filters",
+                }
+                _write_json(state_path, state)
+                continue
+
+            result = train_session_xcebra(
+                session_data,
+                eid,
+                method=method,
+                max_iterations=max_iterations,
+                batch_size=batch_size,
+                n_attribution_samples=n_attribution_samples,
+                wandb_run=wandb_run,
+                wandb_log_interval=wandb_log_interval,
+                save_models=save_models,
+                checkpoint_frequency=checkpoint_frequency,
+                checkpoint_retention=checkpoint_retention,
+                verbose=verbose,
+            )
+            if result is None:
+                state["sessions"][eid] = {
+                    "status": "skipped",
+                    "source": str(npz_path.name),
+                    "reason": "training_filters",
+                }
+                _write_json(state_path, state)
+                continue
+
+            with result_jsonl.open("a", encoding="utf-8") as handle:
+                for row in _neuron_rows(session_data, result):
+                    handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+                handle.flush()
+
+            state["sessions"][eid] = {
+                "status": "complete",
+                "source": str(npz_path.name),
+                "neurons": int(result["N"]),
+                "trials": int(result["K"]),
+            }
+            _write_json(state_path, state)
+            completed.add(eid)
+
+        except Exception as exc:
+            state["sessions"][eid] = {
+                "status": "failed",
+                "source": str(npz_path.name),
+                "error": repr(exc),
+            }
+            _write_json(state_path, state)
+            traceback.print_exc()
+            print(f"Session {eid} failed; continuing with the next session.")
+        finally:
+            # Release the large arrays and model graphs before the next raw
+            # session is loaded. This is important on both disk- and RAM-
+            # constrained workers.
+            session_data = None
+            result = None
+            gc.collect()
+
+    import pandas as pd
+
+    if result_jsonl.exists():
+        neuron_df = pd.read_json(str(result_jsonl), lines=True)
+    else:
+        neuron_df = pd.DataFrame()
+    neuron_df.to_json(str(result_json), orient="records", indent=2)
+
+    summary = {
+        "total_sources": len(npz_files),
+        "complete": sum(
+            info.get("status") == "complete"
+            for info in state["sessions"].values()
+        ),
+        "skipped": sum(
+            info.get("status") == "skipped"
+            for info in state["sessions"].values()
+        ),
+        "failed": sum(
+            info.get("status") == "failed"
+            for info in state["sessions"].values()
+        ),
+        "neurons": len(neuron_df),
+    }
+    state["summary"] = summary
+    _write_json(state_path, state)
+    print(f"Streaming summary: {summary}")
+    print(f"Results saved to {result_json}")
+    return neuron_df
 
 
 def cross_validate_session(
