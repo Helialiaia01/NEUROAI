@@ -27,6 +27,18 @@ from xcebra_ibl.configs.config import (
 )
 
 
+def _session_id(npz_path):
+    """Return the session ID for either supported export filename format."""
+    stem = Path(npz_path).stem
+    if stem.startswith("data_wtonguepaw_"):
+        # data_wtonguepaw_{eid}_all_spsT10_False.npz
+        return "_".join(stem.split("_")[2:-3])
+    if stem.startswith("data_"):
+        # Current local export: data_{eid}.npz
+        return stem[len("data_"):]
+    return stem
+
+
 # ──────────────────────────────────────────────────────
 # Variable extraction functions (identical to brainwide-RRR)
 # ──────────────────────────────────────────────────────
@@ -139,24 +151,6 @@ def _extract_variable(var_name, temp_data, ks_include, neural_data, K, T, shift_
         beh_raw = temp_data["licks"][ks_include, :-1]  # (K, T_raw, 1)
         if len(beh_raw.shape) == 2:
             beh_raw = beh_raw[:, :, np.newaxis]
-        return _preprocess_movement(beh_raw, neural_data, shift_beh, delay_info, var_name)
-
-    elif var_name == "paw":
-        # Usually shape (K, T_raw, 2) or (K, T_raw, 1) depending on how it was loaded
-        beh_raw = temp_data.get("paw_motion", None)
-        if beh_raw is None:
-            # Fallback if paw_motion isn't actually in the npz file
-            print(f"Warning: 'paw_motion' not found in data, filling with zeros")
-            beh_raw = np.zeros((K, T + 10, 1))  # Dummy dimension to prevent processing crashes
-        else:
-            beh_raw = beh_raw[ks_include, :-1]
-
-        if len(beh_raw.shape) == 2:
-            beh_raw = beh_raw[:, :, np.newaxis]
-        elif len(beh_raw.shape) == 3 and beh_raw.shape[-1] > 1:
-            # If multiple paw dimensions (e.g. left/right or x/y), take max energy similar to whisker
-            beh_raw = np.max(beh_raw, axis=-1, keepdims=True)
-            
         return _preprocess_movement(beh_raw, neural_data, shift_beh, delay_info, var_name)
 
     elif var_name == "whisker_max":
@@ -392,10 +386,8 @@ def preprocess_session(
     trial_ids = np.repeat(np.arange(K), T)   # (K*T,)
     time_ids = np.tile(np.arange(T), K)      # (K*T,)
 
-    # Extract eid from filename
-    fname = Path(npz_path).stem
-    eid_parts = fname.split("_")
-    eid = "_".join(eid_parts[2:-3])
+    # Extract eid from either the legacy or current export filename.
+    eid = _session_id(npz_path)
 
     return {
         "X_3d": X_3d,                         # (K, T, 8)
@@ -453,7 +445,9 @@ def preprocess_all_sessions(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    npz_files = sorted(data_dir.glob("data_wtonguepaw_*_all_spsT*.npz"))
+    # Support legacy names and the current data/downloaded/data_{eid}.npz
+    # export. rglob also handles an enclosing directory in the Kaggle dataset.
+    npz_files = sorted(data_dir.rglob("*.npz"))
     if not npz_files:
         print(f"No .npz files found in {data_dir}")
         print("Run download_ibl.py first, or place files manually.")
@@ -465,8 +459,7 @@ def preprocess_all_sessions(
     all_sessions = {}
     for npz_path in tqdm(npz_files, desc="Preprocessing sessions"):
         # Check if already preprocessed
-        eid_parts = npz_path.stem.split("_")
-        eid = "_".join(eid_parts[2:-3])
+        eid = _session_id(npz_path)
         cache_path = output_dir / f"session_{eid}.pkl"
 
         if cache_path.exists():

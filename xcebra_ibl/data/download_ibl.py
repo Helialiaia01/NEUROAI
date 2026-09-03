@@ -141,22 +141,9 @@ def download_ibl_sessions(
                     load_tongue=True,
                 )
                 
-                # ------ CUSTOM PAW EXTRACTION ------
-                # Attempt to extract 'leftCamera' paw tracking or DLC features manually,
-                # because the original paper authors ignored it despite naming files 'wtonguepaw'.
-                try:
-                    left_cam_features = one.load_object(eid, 'leftCamera', attribute='dlc')
-                    if left_cam_features is not None and 'paws_xy' in left_cam_features:
-                        paw_data = left_cam_features['paws_xy']  # Approximation
-                        # Need to interpolate to trial binning...
-                        paw_motion = np.zeros_like(data_ret["licks"]) # Fallback proxy shape
-                    else:
-                        paw_motion = np.zeros_like(data_ret["licks"])
-                except Exception as e:
-                    # ONE might fail to load object if it doesn't exist
-                    paw_motion = np.zeros_like(data_ret["licks"])
-                data_ret["paw_motion"] = paw_motion
-                # -----------------------------------
+                # Note: we do not fabricate or save a 'paw' variable here.
+                # The original brainwide-RRR pipeline did not rely on paw data,
+                # so we skip extracting/saving any paw_motion proxy.
 
             except Exception as e:
                 if verbose:
@@ -177,7 +164,6 @@ def download_ibl_sessions(
                 wheel_vel=data_ret["wheel_vel"],
                 whisker_motion=data_ret["whisker_motion"],
                 licks=data_ret["licks"],
-                paw_motion=data_ret["paw_motion"],
             )
             n_valid += 1
             total_downloaded += 1
@@ -201,13 +187,16 @@ def list_available_sessions(data_dir=None):
         data_dir = DATA_RAW_DIR
     data_dir = Path(data_dir)
 
-    npz_files = sorted(data_dir.glob("data_wtonguepaw_*_all_spsT*.npz"))
+    npz_files = sorted(data_dir.rglob("*.npz"))
     eids = []
     for f in npz_files:
-        # Extract eid from filename: data_wtonguepaw_{eid}_all_spsT10_False.npz
-        parts = f.stem.split("_")
-        # eid is a UUID that may contain hyphens
-        eid = "_".join(parts[2:-3])  # everything between 'wtonguepaw_' and '_all_spsT...'
+        stem = f.stem
+        if stem.startswith("data_wtonguepaw_"):
+            eid = "_".join(stem.split("_")[2:-3])
+        elif stem.startswith("data_"):
+            eid = stem[len("data_"):]
+        else:
+            eid = stem
         eids.append(eid)
     return eids, npz_files
 

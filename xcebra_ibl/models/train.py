@@ -101,6 +101,7 @@ def train_session_xcebra(
     wandb_run=None,
     wandb_log_interval=50,
     save_models=True,
+    checkpoint_frequency=1,
     verbose=True,
 ):
     """
@@ -156,6 +157,8 @@ def train_session_xcebra(
     model = XCEBRAModel(
         max_iterations=max_iterations,
         batch_size=min(batch_size, K * T),
+        checkpoint_dir=MODELS_DIR / "checkpoints" / eid,
+        checkpoint_frequency=checkpoint_frequency,
         **model_kwargs,
     )
 

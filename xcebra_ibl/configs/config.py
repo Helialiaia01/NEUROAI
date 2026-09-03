@@ -10,11 +10,29 @@ from pathlib import Path
 # ──────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
-DATA_RAW_DIR = PROJECT_ROOT / "data_ibl_raw"        # raw .npz from IBL
-DATA_PROCESSED_DIR = PROJECT_ROOT / "data_processed" # preprocessed X, y
-RESULTS_DIR = PROJECT_ROOT / "results"
-MODELS_DIR = PROJECT_ROOT / "trained_models"
-REPOS_DIR = WORKSPACE_ROOT / "repos"
+
+# Kaggle mounts datasets read-only under /kaggle/input and only publishes files
+# written under /kaggle/working. Keep local defaults compatible with the
+# existing checkout while allowing the launcher to redirect generated output.
+KAGGLE_INPUT_DIR = os.environ.get(
+    "KAGGLE_INPUT_DIR", str(WORKSPACE_ROOT / "data" / "downloaded")
+)
+KAGGLE_WORKING_DIR = os.environ.get("KAGGLE_WORKING_DIR")
+
+if KAGGLE_WORKING_DIR:
+    OUT_DIR = Path(KAGGLE_WORKING_DIR)
+    DATA_RAW_DIR = Path(KAGGLE_INPUT_DIR)
+    DATA_PROCESSED_DIR = OUT_DIR / "data_processed"
+    RESULTS_DIR = OUT_DIR / "results"
+    MODELS_DIR = OUT_DIR / "trained_models"
+else:
+    OUT_DIR = WORKSPACE_ROOT
+    DATA_RAW_DIR = Path(KAGGLE_INPUT_DIR)
+    DATA_PROCESSED_DIR = PROJECT_ROOT / "data_processed"  # preprocessed X, y
+    RESULTS_DIR = PROJECT_ROOT / "results"
+    MODELS_DIR = PROJECT_ROOT / "trained_models"
+
+REPOS_DIR = Path(os.environ.get("XCEBRA_REPOS_DIR", str(WORKSPACE_ROOT / "repos")))
 
 BRAINWIDE_RRR_REPO = REPOS_DIR / "brainwide-RRR"
 ALLEN_AREA_LIST_CSV = BRAINWIDE_RRR_REPO / "example1" / "utils" / "area_list.csv"
@@ -69,7 +87,7 @@ STANDARDIZE_X = True
 # Areas to exclude
 AREAS_EXCLUDE = ["root", "void", "y"]
 
-# The 9 behavioral variables (in order)
+# The 8 behavioral variables (in order)
 VARIABLE_NAMES = [
     "block",           # prior probability block
     "side",            # stimulus side
@@ -79,11 +97,10 @@ VARIABLE_NAMES = [
     "wheel",           # wheel velocity (time-varying)
     "whisker_max",     # whisker motion energy (time-varying)
     "lick",            # lick rate (time-varying)
-    "paw",             # paw motion energy (time-varying)
 ]
 VARIABLE_DISPLAY_NAMES = [
     "Block", "Stimulus", "Contrast", "Choice",
-    "Outcome", "Wheel", "Whisker", "Lick", "Paw",
+    "Outcome", "Wheel", "Whisker", "Lick",
 ]
 N_VARIABLES = len(VARIABLE_NAMES)
 

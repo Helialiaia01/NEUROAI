@@ -1,0 +1,47 @@
+"""Kaggle entry point: clone the GitHub repo and run its real pipeline."""
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+
+REPO = "https://github.com/Helialiaia01/NEUROAI.git"
+REPO_DIR = "/kaggle/working/repo"
+
+
+def _find_dataset_dir():
+    configured = os.environ.get("KAGGLE_INPUT_DIR")
+    if configured:
+        path = Path(configured)
+        if path.exists():
+            return path
+
+    input_root = Path("/kaggle/input")
+    for candidate in sorted(input_root.iterdir()):
+        if candidate.is_dir() and next(candidate.rglob("data_*.npz"), None):
+            return candidate
+    raise FileNotFoundError(
+        "No data_*.npz files found under /kaggle/input. "
+        "Verify the dataset source in kernel-metadata.json."
+    )
+
+
+def main():
+    subprocess.run(["git", "clone", "--depth", "1", REPO, REPO_DIR], check=True)
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-r", f"{REPO_DIR}/requirements.txt"],
+        check=True,
+    )
+
+    os.environ["KAGGLE_INPUT_DIR"] = str(_find_dataset_dir())
+    os.environ["KAGGLE_WORKING_DIR"] = "/kaggle/working"
+    sys.path.insert(0, REPO_DIR)
+
+    from xcebra_ibl.kaggle_train import main as train_main
+
+    train_main()
+
+
+if __name__ == "__main__":
+    main()

@@ -81,6 +81,8 @@ class XCEBRAModel:
         num_hidden_units: int = NUM_HIDDEN_UNITS,
         time_offsets: int = TIME_OFFSETS,
         device: str = "cuda_if_available",
+        checkpoint_dir: Optional[str] = None,
+        checkpoint_frequency: int = 1,
     ):
         self.embedding_dim_per_group = embedding_dim_per_group
         self.n_groups = N_VARIABLES
@@ -93,12 +95,31 @@ class XCEBRAModel:
         self.num_hidden_units = num_hidden_units
         self.time_offsets = time_offsets
         self.device = device
+        self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir else None
+        self.checkpoint_frequency = checkpoint_frequency
 
         # Will be set during fit
         self.models_ = {}           # one CEBRA model per variable
         self.joint_model_ = None    # single CEBRA model with all labels
         self.is_fitted_ = False
         self.training_losses_ = {}
+
+    def _checkpoint_callback(self, prefix):
+        """Build a CEBRA callback that saves the solver after each mini-batch."""
+        if self.checkpoint_dir is None:
+            return None
+        if self.checkpoint_frequency < 1:
+            raise ValueError("checkpoint_frequency must be at least 1")
+
+        checkpoint_dir = self.checkpoint_dir
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+        def save_checkpoint(num_steps, solver):
+            filename = f"{prefix}_step_{num_steps:08d}.pt"
+            solver.save(str(checkpoint_dir), filename)
+            print(f"  Saved mini-batch checkpoint: {checkpoint_dir / filename}")
+
+        return save_checkpoint
 
     def fit_per_variable(
         self,
@@ -153,13 +174,21 @@ class XCEBRAModel:
             unique_vals = np.unique(y[~np.isnan(y)])
             is_discrete = len(unique_vals) <= 10
 
+            callback = self._checkpoint_callback(var_name)
+            fit_kwargs = {}
+            if callback is not None:
+                fit_kwargs = {
+                    "callback": callback,
+                    "callback_frequency": self.checkpoint_frequency,
+                }
+
             if is_discrete:
                 # Discrete labels → use as-is (CEBRA handles discrete labels)
-                model.fit(neural_data, y)
+                model.fit(neural_data, y, **fit_kwargs)
             else:
                 # Continuous labels → pass as 2D array
                 y_2d = y.reshape(-1, 1)
-                model.fit(neural_data, y_2d)
+                model.fit(neural_data, y_2d, **fit_kwargs)
 
             self.models_[var_name] = model
             self.training_losses_[var_name] = (
@@ -236,7 +265,14 @@ class XCEBRAModel:
             hybrid=True,  # Use hybrid mode when mixing discrete + continuous
         )
 
-        model.fit(neural_data, *y_args)
+        callback = self._checkpoint_callback("joint")
+        fit_kwargs = {}
+        if callback is not None:
+            fit_kwargs = {
+                "callback": callback,
+                "callback_frequency": self.checkpoint_frequency,
+            }
+        model.fit(neural_data, *y_args, **fit_kwargs)
         self.joint_model_ = model
         self.is_fitted_ = True
 

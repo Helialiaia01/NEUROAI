@@ -250,10 +250,9 @@ def run_demo():
     labels["wheel"] = np.random.randn(n_timesteps)
     labels["whisker_max"] = np.abs(np.random.randn(n_timesteps))
     labels["lick"] = np.abs(np.random.randn(n_timesteps))
-    labels["paw"] = np.abs(np.random.randn(n_timesteps))
 
     # Stack labels into matrix
-    label_matrix = np.column_stack([labels[v] for v in VARIABLE_NAMES])  # (T, 9)
+    label_matrix = np.column_stack([labels[v] for v in VARIABLE_NAMES])  # (T, 8)
 
     # Generate neural data with known selectivity
     neural_data = np.random.randn(n_timesteps, n_neurons) * 0.3
@@ -262,20 +261,18 @@ def run_demo():
     for area_idx, (area_name, profile) in enumerate(area_profiles.items()):
         start_n = area_idx * neurons_per_area
         end_n = (area_idx + 1) * neurons_per_area
+    # Each neuron in this area has activity driven by the area's profile
+    for ni in range(start_n, end_n):
+        # Neuron-specific loading (with noise)
+        full_profile = np.zeros(N_VARIABLES)
+        full_profile[:len(profile)] = profile
+        neuron_profile = full_profile * (0.5 + np.random.rand(N_VARIABLES))
 
-        # Each neuron in this area has activity driven by the area's profile
-        for ni in range(start_n, end_n):
-            # Neuron-specific loading (with noise)
-            # Expand true profile to 9 variables with zeros for 'paw' to avoid shape errors
-            full_profile = np.zeros(N_VARIABLES)
-            full_profile[:len(profile)] = profile
-            neuron_profile = full_profile * (0.5 + np.random.rand(N_VARIABLES))
-            
-            # Convert to float array to prevent dimension/type errors
-            neuron_profile = np.array(neuron_profile, dtype=float)
-            
-            # Neural activity = weighted sum of labels + noise
-            neural_data[:, ni] += np.dot(label_matrix, neuron_profile) + np.random.randn(n_timesteps) * 0.5
+        # Convert to float array to prevent dimension/type errors
+        neuron_profile = np.array(neuron_profile, dtype=float)
+
+        # Neural activity = weighted sum of labels + noise
+        neural_data[:, ni] += np.dot(label_matrix, neuron_profile) + np.random.randn(n_timesteps) * 0.5
 
         area_labels.extend([area_name] * neurons_per_area)
 

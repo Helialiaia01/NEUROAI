@@ -2,9 +2,14 @@
 .venv/
 venv_cebra/
 
+.secrets/
 # Data and caches
+/data/
+/IBL_cache/
 xcebra_ibl/data_ibl_raw/
 xcebra_ibl/data_processed/
+xcebra_ibl/ibl_cache/
+/dataset-metadata.json
 __pycache__/
 *.npz
 *.npy
