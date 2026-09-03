@@ -34,11 +34,12 @@ kaggle kernels push -p kaggle/launcher
 scripts/kaggle_wait_and_fetch.sh
 ```
 
-The default run uses the streaming pipeline: it preprocesses and trains one
-session at a time, writes resumable state to `results/streaming_state.json`,
-and appends neuron results to `results/xcebra_neuron_results.jsonl`. This
-keeps the raw dataset mounted read-only and avoids filling Kaggle's writable
-volume with all preprocessed sessions.
+The default run is a small three-session GPU pilot using the streaming
+pipeline. It preprocesses and trains one session at a time, writes resumable
+state to `results/streaming_state.json`, and appends neuron results to
+`results/xcebra_neuron_results.jsonl`. This validates the runtime before a
+long full-dataset run and avoids filling Kaggle's writable volume with all
+preprocessed sessions.
 For a smaller validation run, set the pipeline arguments before pushing a new
 kernel version, for example:
 

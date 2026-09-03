@@ -43,7 +43,19 @@ def _pipeline_args(argv=None):
     # Streaming prevents Kaggle's small writable volume from filling with all
     # preprocessed sessions. One checkpoint is attempted per mini-batch, while
     # only the newest two are retained for safe recovery.
-    return ["--stream", "--analyze"]
+    # The first GPU run is deliberately a small pilot. It validates the
+    # mounted data, CEBRA version, checkpoint callback, and end-to-end output
+    # before a long full-dataset run is submitted.
+    return [
+        "--stream",
+        "--analyze",
+        "--limit-sessions",
+        "3",
+        "--max-iterations",
+        "1000",
+        "--n-attribution-samples",
+        "500",
+    ]
 
 
 def main(argv=None):
