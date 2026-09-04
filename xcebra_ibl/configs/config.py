@@ -34,10 +34,19 @@ else:
 
 REPOS_DIR = Path(os.environ.get("XCEBRA_REPOS_DIR", str(WORKSPACE_ROOT / "repos")))
 
+REFERENCE_DIR = os.environ.get("XCEBRA_REFERENCE_DIR")
+if REFERENCE_DIR:
+    REFERENCE_DIR = Path(REFERENCE_DIR)
+
 BRAINWIDE_RRR_REPO = REPOS_DIR / "brainwide-RRR"
 ALLEN_AREA_LIST_CSV = BRAINWIDE_RRR_REPO / "example1" / "utils" / "area_list.csv"
 ALLEN_CONN_MATRIX_CSV = BRAINWIDE_RRR_REPO / "example1" / "utils" / "conn_cxcx.csv"
-RRR_RESULTS_DEFAULT = BRAINWIDE_RRR_REPO / "example1" / "trained_model_copy" / "RRRglobal_full.json"
+if REFERENCE_DIR:
+    ALLEN_AREA_LIST_CSV = REFERENCE_DIR / "area_list.csv"
+    ALLEN_CONN_MATRIX_CSV = REFERENCE_DIR / "conn_cxcx.csv"
+    RRR_RESULTS_DEFAULT = REFERENCE_DIR / "RRRglobal_full.json"
+else:
+    RRR_RESULTS_DEFAULT = BRAINWIDE_RRR_REPO / "example1" / "trained_model_copy" / "RRRglobal_full.json"
 
 for d in [DATA_RAW_DIR, DATA_PROCESSED_DIR, RESULTS_DIR, MODELS_DIR]:
     d.mkdir(parents=True, exist_ok=True)

@@ -8,6 +8,7 @@ GitHub repository at HEAD, installs `requirements.txt`, and runs the real
 The current IDs are:
 
 - Dataset: `helialiaia/ibl-xcebra-data`
+- References: `helialiaia/ibl-xcebra-reference`
 - Kernel: `helialiaia/xcebra-ibl-gpu-train`
 - GitHub repo: `https://github.com/Helialiaia01/NEUROAI.git`
 
@@ -23,6 +24,11 @@ kaggle datasets status helialiaia/ibl-xcebra-data
 
 The dataset directory is ignored by Git. The metadata helper only creates
 `data/downloaded/dataset-metadata.json`; it does not copy the 72 GB dataset.
+
+The private reference dataset contains `area_list.csv`, `conn_cxcx.csv`, and
+the Git-LFS-expanded `RRRglobal_full.json` supplied by the dataset authors.
+The Kaggle launcher automatically locates these files under `/kaggle/input`
+and points the analysis at them.
 
 ## Push code and run
 

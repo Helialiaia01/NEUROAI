@@ -8,7 +8,10 @@
   "enable_gpu": "true",
   "enable_internet": "true",
   "machine_shape": "NvidiaTeslaT4",
-  "dataset_sources": ["helialiaia/ibl-xcebra-data"],
+  "dataset_sources": [
+    "helialiaia/ibl-xcebra-data",
+    "helialiaia/ibl-xcebra-reference"
+  ],
   "competition_sources": [],
   "kernel_sources": [],
   "model_sources": []
