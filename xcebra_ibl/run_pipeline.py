@@ -50,8 +50,10 @@ def run_train(
     max_iterations=None,
     batch_size=None,
     n_attribution_samples=2000,
+    model_kwargs=None,
     wandb_run=None,
     wandb_log_interval=50,
+    seed=None,
 ):
     """Step 3: Train xCEBRA models and extract attributions."""
     print("\n" + "=" * 60)
@@ -74,8 +76,10 @@ def run_train(
         max_iterations=max_iterations,
         batch_size=batch_size,
         n_attribution_samples=n_attribution_samples,
+        model_kwargs=model_kwargs,
         wandb_run=wandb_run,
         wandb_log_interval=wandb_log_interval,
+        seed=seed,
         verbose=True,
     )
     return all_results, neuron_df
@@ -91,6 +95,7 @@ def run_streaming_train(
     max_sessions=None,
     wandb_run=None,
     wandb_log_interval=50,
+    seed=None,
 ):
     """Preprocess/train sessions incrementally without a full-data cache."""
     from xcebra_ibl.models.train import train_streaming_sessions
@@ -105,6 +110,7 @@ def run_streaming_train(
         max_sessions=max_sessions,
         wandb_run=wandb_run,
         wandb_log_interval=wandb_log_interval,
+        seed=seed,
         verbose=True,
     )
 
@@ -252,7 +258,9 @@ def run_demo():
 
     # ── Generate synthetic data ──
     n_neurons = 200
-    n_timesteps = 2000  # simulating K*T flattened
+    n_trials = 20
+    trial_length = 100
+    n_timesteps = n_trials * trial_length
     n_variables = N_VARIABLES
 
     print(f"\n  Generating synthetic data:")
@@ -270,11 +278,11 @@ def run_demo():
 
     # Generate behavioral labels
     labels = {}
-    labels["block"] = np.random.choice([-1, 0, 1], size=n_timesteps).astype(float)
-    labels["side"] = np.random.choice([-1, 1], size=n_timesteps).astype(float)
-    labels["contrast_level"] = np.random.choice([0, 1, 4], size=n_timesteps).astype(float)
-    labels["choice"] = np.random.choice([-1, 1], size=n_timesteps).astype(float)
-    labels["outcome"] = np.random.choice([-1, 1], size=n_timesteps).astype(float)
+    labels["block"] = np.random.choice([-1, 0, 1], size=n_timesteps).astype(np.int64)
+    labels["side"] = np.random.choice([-1, 1], size=n_timesteps).astype(np.int64)
+    labels["contrast_level"] = np.random.choice([0, 1, 4], size=n_timesteps).astype(np.int64)
+    labels["choice"] = np.random.choice([-1, 1], size=n_timesteps).astype(np.int64)
+    labels["outcome"] = np.random.choice([-1, 1], size=n_timesteps).astype(np.int64)
     labels["wheel"] = np.random.randn(n_timesteps)
     labels["whisker_max"] = np.abs(np.random.randn(n_timesteps))
     labels["lick"] = np.abs(np.random.randn(n_timesteps))
@@ -289,18 +297,17 @@ def run_demo():
     for area_idx, (area_name, profile) in enumerate(area_profiles.items()):
         start_n = area_idx * neurons_per_area
         end_n = (area_idx + 1) * neurons_per_area
-    # Each neuron in this area has activity driven by the area's profile
-    for ni in range(start_n, end_n):
-        # Neuron-specific loading (with noise)
-        full_profile = np.zeros(N_VARIABLES)
-        full_profile[:len(profile)] = profile
-        neuron_profile = full_profile * (0.5 + np.random.rand(N_VARIABLES))
+        # Each neuron in this area has activity driven by the area's profile.
+        for ni in range(start_n, end_n):
+            full_profile = np.zeros(N_VARIABLES)
+            full_profile[:len(profile)] = profile
+            neuron_profile = full_profile * (0.5 + np.random.rand(N_VARIABLES))
 
-        # Convert to float array to prevent dimension/type errors
-        neuron_profile = np.array(neuron_profile, dtype=float)
-
-        # Neural activity = weighted sum of labels + noise
-        neural_data[:, ni] += np.dot(label_matrix, neuron_profile) + np.random.randn(n_timesteps) * 0.5
+            # Neural activity = weighted sum of labels + noise
+            neural_data[:, ni] += (
+                np.dot(label_matrix, neuron_profile)
+                + np.random.randn(n_timesteps) * 0.5
+            )
 
         area_labels.extend([area_name] * neurons_per_area)
 
@@ -318,18 +325,29 @@ def run_demo():
         model_architecture="offset10-model",  # Use robust offset architecture
         time_offsets=10,
     )
-    model.fit_per_variable(neural_data, labels, verbose=True)
+    trial_ids = np.repeat(np.arange(n_trials), trial_length)
+    time_ids = np.tile(np.arange(trial_length), n_trials)
+    model.fit_per_variable(
+        neural_data, labels, trial_ids, time_ids, trial_length, verbose=True
+    )
 
     # ── Extract embeddings ──
     print(f"\n  Extracting embeddings...")
-    embeddings = model.transform_per_variable(neural_data)
+    embeddings = model.transform_per_variable(
+        neural_data, trial_ids, time_ids, trial_length
+    )
     for var_name, emb in embeddings.items():
         print(f"    {var_name}: shape {emb.shape}")
 
     # ── Compute attributions ──
     print(f"\n  Computing Jacobian attributions...")
     attributions = model.compute_attribution_maps(
-        neural_data, method="per_variable", n_samples=500,
+        neural_data,
+        method="per_variable",
+        n_samples=500,
+        trial_ids=trial_ids,
+        time_ids=time_ids,
+        trial_length=trial_length,
     )
     for var_name, attr in attributions.items():
         print(f"    {var_name}: shape {attr.shape}, "
@@ -463,6 +481,10 @@ def main():
         help="Samples used per session for Jacobian attribution",
     )
     parser.add_argument(
+        "--seed", type=int, default=2025,
+        help="Base random seed; the session id is mixed in deterministically",
+    )
+    parser.add_argument(
         "--comparison-mode",
         choices=["fallback", "strict"],
         default="fallback",
@@ -532,6 +554,7 @@ def main():
             max_sessions=args.limit_sessions,
             wandb_run=wandb_run,
             wandb_log_interval=args.wandb_log_interval,
+            seed=args.seed,
         )
         if args.analyze:
             run_analyze(
@@ -561,6 +584,7 @@ def main():
             n_attribution_samples=args.n_attribution_samples,
             wandb_run=wandb_run,
             wandb_log_interval=args.wandb_log_interval,
+            seed=args.seed,
         )
 
     if args.all or args.analyze:

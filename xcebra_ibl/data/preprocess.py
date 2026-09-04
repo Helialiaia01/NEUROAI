@@ -15,6 +15,7 @@ import os
 import pickle
 import numpy as np
 from pathlib import Path
+from scipy import signal
 from scipy.ndimage import gaussian_filter1d
 from tqdm import tqdm
 
@@ -23,7 +24,7 @@ from xcebra_ibl.configs.config import (
     MIN_FIRING_RATE, MAX_SILENT_PROB, MIN_NEURONS, UNIT_LABEL_MIN,
     MIN_TRIALS, REMOVE_BLOCK5, GAUSSIAN_SMOOTH_SIGMA,
     TRANSFORM_MFR, STANDARDIZE_Y, STANDARDIZE_X,
-    AREAS_EXCLUDE, VARIABLE_NAMES,
+    AREAS_EXCLUDE, VARIABLE_NAMES, DISCRETE_VARIABLE_NAMES,
 )
 
 
@@ -43,7 +44,7 @@ def _session_id(npz_path):
 # Variable extraction functions (identical to brainwide-RRR)
 # ──────────────────────────────────────────────────────
 
-def _find_best_delay_by_cc(beh_signal, neural_data, max_delay=20):
+def _find_best_delay_by_cc(beh_signal, neural_data, max_delay=None):
     """
     Find optimal time delay between behavioral signal and neural activity
     using cross-correlation (mirrors brainwide-RRR utils.find_bestdelay_byCC).
@@ -52,7 +53,8 @@ def _find_best_delay_by_cc(beh_signal, neural_data, max_delay=20):
     ----------
     beh_signal : (K, T_raw) behavioral signal
     neural_data : (K, T, N) neural activity
-    max_delay : int, maximum delay to search (in bins)
+    max_delay : int or None, optional maximum delay to search (in bins).  The
+        default ``None`` reproduces the reference RRR search range exactly.
 
     Returns
     -------
@@ -60,30 +62,50 @@ def _find_best_delay_by_cc(beh_signal, neural_data, max_delay=20):
     success : bool, whether a clear peak was found
     """
     K, T, N = neural_data.shape
-    # Mean neural activity across neurons
-    mean_neural = np.mean(neural_data, axis=2)  # (K, T)
+    # This is the same statistic used by the reference RRR implementation:
+    # correlate each neuron within each trial, average over trials, and select
+    # the lag with the largest population-norm correlation.  Using the mean
+    # neuron (as the previous implementation did) can cancel neurons with
+    # opposite tuning and produces a different behavioral alignment.
+    beh_signal = np.asarray(beh_signal, dtype=float)
+    neural_data = np.asarray(neural_data, dtype=float)
+    if beh_signal.shape[0] != K or beh_signal.shape[1] < T:
+        raise ValueError(
+            f"Behavior signal shape {beh_signal.shape} cannot cover neural shape "
+            f"{neural_data.shape}."
+        )
 
-    best_cc = -np.inf
-    best_d = 10  # default: 10 bins = 100 ms
+    beh_centered = beh_signal - np.mean(beh_signal, axis=1, keepdims=True)
+    neural_centered = neural_data - np.mean(neural_data, axis=1, keepdims=True)
+    lags = signal.correlation_lags(beh_signal.shape[1], T, mode="valid")
+    cc_by_neuron = np.asarray([
+        np.mean(
+            [
+                signal.correlate(
+                    beh_centered[k], neural_centered[k, :, ni], mode="valid"
+                )
+                for k in range(K)
+            ],
+            axis=0,
+        )
+        for ni in range(N)
+    ])
+    cc_norm = np.linalg.norm(cc_by_neuron, axis=0)
 
-    for d in range(0, min(max_delay, beh_signal.shape[1] - T)):
-        beh_slice = beh_signal[:, d:d + T]  # (K, T)
-        # Cross-correlation: mean over trials of correlation across time
-        cc_per_trial = []
-        for k in range(K):
-            b = beh_slice[k]
-            n = mean_neural[k]
-            if np.std(b) > 1e-8 and np.std(n) > 1e-8:
-                cc = np.corrcoef(b, n)[0, 1]
-                cc_per_trial.append(cc)
-        if cc_per_trial:
-            mean_cc = np.mean(cc_per_trial)
-            if mean_cc > best_cc:
-                best_cc = mean_cc
-                best_d = d
+    if max_delay is not None:
+        valid = (lags >= 0) & (lags <= max_delay)
+        if not np.any(valid):
+            return 10, False
+        candidate = np.flatnonzero(valid)
+        best_idx = candidate[np.argmax(cc_norm[valid])]
+    else:
+        best_idx = int(np.argmax(cc_norm))
 
-    success = best_cc > 0.05  # weak threshold
-    return best_d, success
+    best_delay = int(lags[best_idx])
+    # Match the reference success criterion: an interior lag is considered a
+    # measurable delay; edge maxima are treated as an unsuccessful search.
+    success = bool(best_delay > lags.min() and best_delay < lags.max())
+    return (best_delay if success else 10), success
 
 
 def _extract_variable(var_name, temp_data, ks_include, neural_data, K, T, shift_beh=True):
@@ -173,13 +195,16 @@ def _preprocess_movement(beh_raw, neural_data, shift_beh, delay_info, var_name):
     K, T, N = neural_data.shape
     default_delay = 10  # 10 bins = 100 ms
 
+    if beh_raw.shape[1] < T + default_delay:
+        raise ValueError(
+            f"Movement signal has {beh_raw.shape[1]} bins, but {T} neural bins "
+            f"plus the {default_delay}-bin fallback delay are required."
+        )
     beh_processed = np.zeros((K, T, beh_raw.shape[2]))
 
     if shift_beh:
         for i in range(beh_raw.shape[2]):
             bd, success = _find_best_delay_by_cc(beh_raw[:, :, i], neural_data)
-            if not success:
-                bd = default_delay
             delay_info[f"{var_name}_delay_{i}"] = bd
             delay_info[f"{var_name}_success_{i}"] = success
             beh_processed[:, :, i] = beh_raw[:, bd:bd + T, i]
@@ -291,6 +316,9 @@ def preprocess_session(
     data_allN = data_allN[ks_include]
     K = data_allN.shape[0]
 
+    # Apply the trial filter before checking the threshold.  The old code
+    # checked K_total, which could admit sessions with too few usable trials
+    # after removing block-5 trials.
     if K < min_trials:
         if verbose:
             print(f"  Skipping: K={K} < min_trials={min_trials}")
@@ -342,7 +370,7 @@ def preprocess_session(
                 print(f"  Error extracting {var_name}: {e}")
             return None
 
-    X_3d = np.concatenate(var_arrays, axis=-1)  # (K, T, 8)
+    X_3d_raw = np.concatenate(var_arrays, axis=-1)  # (K, T, 8)
 
     # ── Process neural activity (y) ──
     y_3d = data.copy()
@@ -369,13 +397,34 @@ def preprocess_session(
 
     # Z-score input variables per variable per time bin
     if standardize_X:
-        mean_X = np.mean(X_3d, axis=0)  # (T, 8)
-        std_X = np.std(X_3d, axis=0)    # (T, 8)
+        mean_X = np.mean(X_3d_raw, axis=0)  # (T, 8)
+        std_X = np.std(X_3d_raw, axis=0)    # (T, 8)
         std_X = np.clip(std_X, 1e-8, None)
     else:
-        mean_X = np.zeros(X_3d.shape[1:])
-        std_X = np.ones(X_3d.shape[1:])
-    X_3d = (X_3d - mean_X) / std_X
+        mean_X = np.zeros(X_3d_raw.shape[1:])
+        std_X = np.ones(X_3d_raw.shape[1:])
+    X_3d = (X_3d_raw - mean_X) / std_X
+
+    # Keep a separate label representation.  Continuous movement variables
+    # use the normalized representation, while categorical variables retain
+    # their original integer-valued classes for CEBRA's discrete sampler.
+    labels_3d = X_3d.copy()
+    label_arrays = {}
+    label_classes = {}
+    for var_idx, var_name in enumerate(var_list):
+        if var_name in DISCRETE_VARIABLE_NAMES:
+            discrete = np.rint(X_3d_raw[:, :, var_idx]).astype(np.int64)
+            labels_3d[:, :, var_idx] = discrete
+            # CEBRA's discrete sampler uses np.bincount and therefore
+            # requires non-negative integer class ids.  Preserve the original
+            # classes in metadata while passing compact ids to the sampler.
+            classes = np.unique(discrete)
+            label_arrays[var_name] = np.searchsorted(
+                classes, discrete.reshape(K * T)
+            ).astype(np.int64)
+            label_classes[var_name] = classes.tolist()
+        else:
+            label_arrays[var_name] = X_3d[:, :, var_idx].astype(np.float32).reshape(K * T)
 
     # ── Flatten for CEBRA (2D format) ──
     # Each row = one population vector at one time bin of one trial
@@ -391,8 +440,12 @@ def preprocess_session(
 
     return {
         "X_3d": X_3d,                         # (K, T, 8)
+        "labels_3d": labels_3d,               # unscaled categorical labels
         "y_3d": y_3d,                         # (K, T, N)
         "X_2d": X_2d,                         # (K*T, 8)
+        "labels_2d": labels_3d.reshape(K * T, len(var_list)),
+        "label_arrays": label_arrays,
+        "label_classes": label_classes,
         "y_2d": y_2d,                         # (K*T, N)
         "trial_ids": trial_ids,               # (K*T,)
         "time_ids": time_ids,                 # (K*T,)

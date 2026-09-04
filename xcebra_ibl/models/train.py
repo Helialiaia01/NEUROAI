@@ -12,13 +12,15 @@ import pickle
 import json
 import gc
 import traceback
+import hashlib
+import random
 from pathlib import Path
 from tqdm import tqdm
 
 from xcebra_ibl.configs.config import (
     DATA_PROCESSED_DIR, MODELS_DIR, RESULTS_DIR,
     VARIABLE_NAMES, N_VARIABLES, N_CV_FOLDS, TEST_FRACTION,
-    MAX_ITERATIONS, BATCH_SIZE, EMBEDDING_DIM_PER_GROUP,
+    MAX_ITERATIONS, BATCH_SIZE, EMBEDDING_DIM_PER_GROUP, RANDOM_SEED,
 )
 from xcebra_ibl.data.preprocess import (
     load_preprocessed_sessions,
@@ -90,7 +92,15 @@ def prepare_labels_from_session(session_data):
     -------
     labels : dict {var_name: (K*T,) array}
     """
-    X_2d = session_data["X_2d"]  # (K*T, 8) z-scored behavioral variables
+    if "label_arrays" in session_data:
+        return {
+            var_name: np.asarray(values)
+            for var_name, values in session_data["label_arrays"].items()
+        }
+
+    # Preserve integer classes for categorical variables.  Falling back to
+    # X_2d keeps old caches readable, but new preprocessing writes labels_2d.
+    X_2d = session_data.get("labels_2d", session_data["X_2d"])
     labels = {}
     for v, var_name in enumerate(VARIABLE_NAMES):
         labels[var_name] = X_2d[:, v]
@@ -110,6 +120,7 @@ def train_session_xcebra(
     save_models=True,
     checkpoint_frequency=1,
     checkpoint_retention=None,
+    seed=None,
     verbose=True,
 ):
     """
@@ -142,6 +153,22 @@ def train_session_xcebra(
     if model_kwargs is None:
         model_kwargs = {}
 
+    if seed is None:
+        seed = RANDOM_SEED
+    # Give every session a stable but distinct random stream.
+    session_seed = int.from_bytes(
+        hashlib.sha256(str(eid).encode("utf-8")).digest()[:4], "little"
+    ) ^ int(seed)
+    random.seed(session_seed)
+    np.random.seed(session_seed)
+    try:
+        import torch
+        torch.manual_seed(session_seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(session_seed)
+    except ImportError:
+        pass
+
     neural_data = session_data["y_2d"]  # (K*T, N)
     labels = prepare_labels_from_session(session_data)
     N = session_data["N"]
@@ -168,13 +195,28 @@ def train_session_xcebra(
         checkpoint_dir=MODELS_DIR / "checkpoints" / eid,
         checkpoint_frequency=checkpoint_frequency,
         checkpoint_retention=checkpoint_retention,
+        random_seed=session_seed,
         **model_kwargs,
     )
 
     if method == "per_variable":
-        model.fit_per_variable(neural_data, labels, verbose=verbose)
+        model.fit_per_variable(
+            neural_data,
+            labels,
+            trial_ids=session_data.get("trial_ids"),
+            time_ids=session_data.get("time_ids"),
+            trial_length=T,
+            verbose=verbose,
+        )
     elif method == "joint":
-        model.fit_joint(neural_data, labels, verbose=verbose)
+        model.fit_joint(
+            neural_data,
+            labels,
+            trial_ids=session_data.get("trial_ids"),
+            time_ids=session_data.get("time_ids"),
+            trial_length=T,
+            verbose=verbose,
+        )
     else:
         raise ValueError(f"Unknown method: {method}")
 
@@ -182,9 +224,19 @@ def train_session_xcebra(
     if verbose:
         print("\n  Extracting embeddings...")
     if method == "per_variable":
-        embeddings = model.transform_per_variable(neural_data)
+        embeddings = model.transform_per_variable(
+            neural_data,
+            trial_ids=session_data.get("trial_ids"),
+            time_ids=session_data.get("time_ids"),
+            trial_length=T,
+        )
     else:
-        embeddings = model.transform_joint(neural_data)
+        embeddings = model.transform_joint(
+            neural_data,
+            trial_ids=session_data.get("trial_ids"),
+            time_ids=session_data.get("time_ids"),
+            trial_length=T,
+        )
 
     # Compute attribution maps (Jacobian-based)
     if verbose:
@@ -193,6 +245,9 @@ def train_session_xcebra(
         neural_data,
         method=method,
         n_samples=min(n_attribution_samples, K * T),
+        trial_ids=session_data.get("trial_ids"),
+        time_ids=session_data.get("time_ids"),
+        trial_length=T,
     )
 
     # Save models
@@ -268,6 +323,7 @@ def train_streaming_sessions(
     wandb_run=None,
     wandb_log_interval=50,
     save_models=True,
+    seed=None,
     verbose=True,
 ):
     """Preprocess and train sessions one at a time with resumable state.
@@ -352,6 +408,7 @@ def train_streaming_sessions(
                 save_models=save_models,
                 checkpoint_frequency=checkpoint_frequency,
                 checkpoint_retention=checkpoint_retention,
+                seed=seed,
                 verbose=verbose,
             )
             if result is None:
@@ -449,11 +506,15 @@ def cross_validate_session(
 
     Returns
     -------
-    cv_results : dict {var_name: {'r2_scores': [...], 'mean_r2': float}}
+    cv_results : dict
+        Per-variable held-out scores. Continuous variables report R²;
+        categorical variables report balanced accuracy. Splits are by trial.
     """
-    from sklearn.model_selection import KFold
+    from sklearn.dummy import DummyClassifier
     from sklearn.linear_model import Ridge
-    from sklearn.metrics import r2_score
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import balanced_accuracy_score, r2_score
+    from sklearn.model_selection import KFold
 
     if n_folds is None:
         n_folds = N_CV_FOLDS
@@ -470,7 +531,13 @@ def cross_validate_session(
     unique_trials = np.unique(trial_ids)
 
     kf = KFold(n_splits=n_folds, shuffle=True, random_state=42)
-    cv_results = {var_name: {"r2_scores": []} for var_name in VARIABLE_NAMES}
+    cv_results = {}
+    for var_name in VARIABLE_NAMES:
+        is_discrete = np.issubdtype(labels[var_name].dtype, np.integer)
+        cv_results[var_name] = {
+            "scores": [],
+            "metric": "balanced_accuracy" if is_discrete else "r2",
+        }
 
     for fold_idx, (train_trial_idx, test_trial_idx) in enumerate(kf.split(unique_trials)):
         if verbose:
@@ -486,6 +553,10 @@ def cross_validate_session(
         test_neural = neural_data[test_mask]
         train_labels = {v: labels[v][train_mask] for v in VARIABLE_NAMES}
         test_labels = {v: labels[v][test_mask] for v in VARIABLE_NAMES}
+        train_trial_ids = trial_ids[train_mask]
+        test_trial_ids = trial_ids[test_mask]
+        train_time_ids = session_data["time_ids"][train_mask]
+        test_time_ids = session_data["time_ids"][test_mask]
 
         # Train CEBRA on training data
         model = XCEBRAModel(
@@ -494,30 +565,71 @@ def cross_validate_session(
         )
 
         if method == "per_variable":
-            model.fit_per_variable(train_neural, train_labels, verbose=False)
-            train_emb = model.transform_per_variable(train_neural)
-            test_emb = model.transform_per_variable(test_neural)
+            model.fit_per_variable(
+                train_neural,
+                train_labels,
+                trial_ids=train_trial_ids,
+                time_ids=train_time_ids,
+                trial_length=T,
+                verbose=False,
+            )
+            train_emb = model.transform_per_variable(
+                train_neural, train_trial_ids, train_time_ids, T
+            )
+            test_emb = model.transform_per_variable(
+                test_neural, test_trial_ids, test_time_ids, T
+            )
         else:
-            model.fit_joint(train_neural, train_labels, verbose=False)
-            train_emb = model.transform_joint(train_neural)
-            test_emb = model.transform_joint(test_neural)
+            model.fit_joint(
+                train_neural,
+                train_labels,
+                trial_ids=train_trial_ids,
+                time_ids=train_time_ids,
+                trial_length=T,
+                verbose=False,
+            )
+            train_emb = model.transform_joint(
+                train_neural, train_trial_ids, train_time_ids, T
+            )
+            test_emb = model.transform_joint(
+                test_neural, test_trial_ids, test_time_ids, T
+            )
 
         # Decode each variable from embeddings using Ridge regression
         for var_name in VARIABLE_NAMES:
             if var_name not in train_emb:
                 continue
 
-            decoder = Ridge(alpha=1.0)
-            decoder.fit(train_emb[var_name], train_labels[var_name])
-            pred = decoder.predict(test_emb[var_name])
-            r2 = r2_score(test_labels[var_name], pred)
-            cv_results[var_name]["r2_scores"].append(r2)
+            y_train = train_labels[var_name]
+            y_test = test_labels[var_name]
+            if np.issubdtype(y_train.dtype, np.integer):
+                # R² is not meaningful for category IDs. Use balanced
+                # accuracy, which remains interpretable under class imbalance.
+                if np.unique(y_train).size < 2:
+                    decoder = DummyClassifier(strategy="most_frequent")
+                else:
+                    decoder = LogisticRegression(max_iter=1000, random_state=42)
+                decoder.fit(train_emb[var_name], y_train)
+                pred = decoder.predict(test_emb[var_name])
+                score = balanced_accuracy_score(y_test, pred)
+            else:
+                decoder = Ridge(alpha=1.0)
+                decoder.fit(train_emb[var_name], y_train)
+                pred = decoder.predict(test_emb[var_name])
+                score = r2_score(y_test, pred)
+            cv_results[var_name]["scores"].append(float(score))
 
     # Compute means
     for var_name in VARIABLE_NAMES:
-        scores = cv_results[var_name]["r2_scores"]
-        cv_results[var_name]["mean_r2"] = np.mean(scores) if scores else 0.0
-        cv_results[var_name]["std_r2"] = np.std(scores) if scores else 0.0
+        scores = cv_results[var_name]["scores"]
+        cv_results[var_name]["mean_score"] = np.mean(scores) if scores else np.nan
+        cv_results[var_name]["std_score"] = np.std(scores) if scores else np.nan
+        if cv_results[var_name]["metric"] == "r2":
+            cv_results[var_name]["mean_r2"] = cv_results[var_name]["mean_score"]
+            cv_results[var_name]["std_r2"] = cv_results[var_name]["std_score"]
+        else:
+            cv_results[var_name]["mean_balanced_accuracy"] = cv_results[var_name]["mean_score"]
+            cv_results[var_name]["std_balanced_accuracy"] = cv_results[var_name]["std_score"]
 
     return cv_results
 
@@ -531,6 +643,7 @@ def train_all_sessions(
     model_kwargs=None,
     wandb_run=None,
     wandb_log_interval=50,
+    seed=None,
     verbose=True,
 ):
     """
@@ -572,6 +685,7 @@ def train_all_sessions(
             model_kwargs=model_kwargs,
             wandb_run=wandb_run,
             wandb_log_interval=wandb_log_interval,
+            seed=seed,
             verbose=verbose,
         )
 

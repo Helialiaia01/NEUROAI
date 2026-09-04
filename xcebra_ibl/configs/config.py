@@ -46,7 +46,7 @@ if REFERENCE_DIR:
     ALLEN_CONN_MATRIX_CSV = REFERENCE_DIR / "conn_cxcx.csv"
     RRR_RESULTS_DEFAULT = REFERENCE_DIR / "RRRglobal_full.json"
 else:
-    RRR_RESULTS_DEFAULT = BRAINWIDE_RRR_REPO / "example1" / "trained_model_copy" / "RRRglobal_full.json"
+    RRR_RESULTS_DEFAULT = BRAINWIDE_RRR_REPO / "example1" / "trained_model" / "RRRglobal_full.json"
 
 for d in [DATA_RAW_DIR, DATA_PROCESSED_DIR, RESULTS_DIR, MODELS_DIR]:
     d.mkdir(parents=True, exist_ok=True)
@@ -107,6 +107,12 @@ VARIABLE_NAMES = [
     "whisker_max",     # whisker motion energy (time-varying)
     "lick",            # lick rate (time-varying)
 ]
+# CEBRA determines the sampling distribution from the dtype of each label.
+# Keep these variables as integer labels all the way into CEBRA; z-scoring a
+# categorical variable would silently turn it into a continuous index.
+DISCRETE_VARIABLE_NAMES = {
+    "block", "side", "contrast_level", "choice", "outcome",
+}
 VARIABLE_DISPLAY_NAMES = [
     "Block", "Stimulus", "Contrast", "Choice",
     "Outcome", "Wheel", "Whisker", "Lick",
@@ -131,7 +137,12 @@ TIME_OFFSETS = 10
 
 # Jacobian regularization (xCEBRA)
 JACOBIAN_REG_WEIGHT = 0.01    # λ for ‖J‖² regularization
-JACOBIAN_N_PROJ = 1           # number of random projections for Jacobian
+JACOBIAN_N_PROJ = -1          # exact regularizer (all output dimensions)
+JACOBIAN_PINV_RCOND = 1e-5    # SVD cutoff for stable inverted gradients
+
+# Reproducibility.  The session id is mixed into this seed by the trainer so
+# every session has a stable, distinct random stream.
+RANDOM_SEED = 2025
 
 # ──────────────────────────────────────────────────────
 # Selectivity & Clustering Parameters

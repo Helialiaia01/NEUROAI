@@ -24,6 +24,7 @@ from pathlib import Path
 from xcebra_ibl.configs.config import (
     VARIABLE_NAMES, VARIABLE_DISPLAY_NAMES, N_VARIABLES,
     MIN_NEURONS_PER_AREA, MIN_NEURONS_PER_AREA_CORR,
+    MIN_DELTA_R2,
     RESULTS_DIR, CORTICAL_AREAS, DATA_PROCESSED_DIR,
     ALLEN_AREA_LIST_CSV, ALLEN_CONN_MATRIX_CSV,
     RRR_RESULTS_DEFAULT,
@@ -45,6 +46,11 @@ def _load_allen_anatomy_from_csv():
     conn_i2a = {i: a for i, a in enumerate(conn_area_list)}
     conn_a2i = {a: i for i, a in enumerate(conn_area_list)}
     conn_mat = pd.read_csv(conn_mat_path, header=None).values
+    if conn_mat.shape != (len(conn_area_list), len(conn_area_list)):
+        raise ValueError(
+            "Allen connectivity matrix shape does not match area list: "
+            f"{conn_mat.shape} vs {(len(conn_area_list), len(conn_area_list))}"
+        )
 
     mod2area = {
         "prefrontal": ["FRP", "ACAd", "ACAv", "PL", "ILA", "ORBl", "ORBm", "ORBvl"],
@@ -179,8 +185,14 @@ def compute_selectivity_from_attributions(
     if min_neurons_per_area is None:
         min_neurons_per_area = MIN_NEURONS_PER_AREA
 
+    if neuron_df.empty:
+        raise ValueError("Cannot compute selectivity profiles from an empty DataFrame")
+
     # Extract per-neuron selectivity matrix
     attr_cols = [f"xcebra_attr_{v}" for v in VARIABLE_NAMES]
+    missing = [c for c in attr_cols if c not in neuron_df.columns]
+    if missing or "acronym" not in neuron_df.columns:
+        raise ValueError(f"Missing selectivity columns: {missing or ['acronym']}")
     sel_per_neuron = neuron_df[attr_cols].values  # (n_neurons, 8)
 
     # Get areas
@@ -204,6 +216,10 @@ def compute_selectivity_from_attributions(
             n_neurons_per_area[area] = n_neurons
 
     raw_sel_areas = np.array(raw_sel_areas)  # (n_areas, 8)
+    if raw_sel_areas.ndim != 2 or raw_sel_areas.shape[0] < 2:
+        raise ValueError(
+            f"Need at least two sufficiently sampled areas; got {len(area_order)}"
+        )
 
     # Z-score per variable across areas
     sel_areas = (raw_sel_areas - raw_sel_areas.mean(axis=0)) / (
@@ -241,6 +257,7 @@ def correlate_with_anatomy(
     area_order,
     anatomical_connectivity=None,
     area2hierarchy=None,
+    min_pairs=10,
 ):
     """
     Correlate selectivity similarity with anatomical connectivity.
@@ -298,7 +315,7 @@ def correlate_with_anatomy(
 
     # Compute Spearman correlation
     valid = ~np.isnan(conn_values)
-    if valid.sum() > 3:
+    if valid.sum() >= min_pairs:
         rs, ps = spearmanr(
             np.array(conn_values)[valid], np.array(sim_values)[valid]
         )
@@ -311,6 +328,7 @@ def correlate_with_anatomy(
         "conn_values": conn_values,
         "sim_values": sim_values,
         "pairs": pairs,
+        "n_valid_pairs": int(valid.sum()),
     }
 
 
@@ -333,6 +351,15 @@ def cluster_areas(sel_areas, area_order, n_clusters=6, method="ward"):
         - 'area_clusters': dict {cluster_id: [area_names]}
         - 'cluster_profiles': dict {cluster_id: (8,) mean profile}
     """
+    sel_areas = np.asarray(sel_areas, dtype=float)
+    if sel_areas.ndim != 2 or sel_areas.shape[0] != len(area_order):
+        raise ValueError("sel_areas and area_order have incompatible shapes")
+    if len(area_order) < 2:
+        raise ValueError("At least two areas are required for clustering")
+    if not np.isfinite(sel_areas).all():
+        raise ValueError("Selectivity profiles contain non-finite values")
+    n_clusters = min(int(n_clusters), len(area_order))
+
     # Compute linkage
     dist = pdist(sel_areas, metric="cosine")
     Z = linkage(dist, method=method)
@@ -454,10 +481,25 @@ def compare_with_rrr(
         return None
 
     # Compute RRR selectivity (same as step3_analyze_selectivity.py)
+    required_rrr = {"RRRglobal_r2", "meanact_r2", "RRRglobal_beta", "acronym"}
+    missing_rrr = required_rrr.difference(rrr_df.columns)
+    if missing_rrr:
+        raise ValueError(f"RRR artifact is missing columns: {sorted(missing_rrr)}")
     rrr_df["RRRglobal_deltaR2"] = rrr_df["RRRglobal_r2"] - rrr_df["meanact_r2"]
-    nis_incmask = rrr_df["RRRglobal_deltaR2"] > 0.015
+    nis_incmask = (
+        (rrr_df["RRRglobal_deltaR2"] > MIN_DELTA_R2)
+        & rrr_df["acronym"].isin(CORTICAL_AREAS)
+    )
 
-    coef_vs = np.array([b[:-1] for b in rrr_df.loc[nis_incmask, "RRRglobal_beta"]])
+    beta_values = rrr_df.loc[nis_incmask, "RRRglobal_beta"].tolist()
+    if not beta_values:
+        return {"message": "No RRR neurons passed the delta-R2 threshold"}
+    coef_vs = np.asarray([np.asarray(b)[:-1] for b in beta_values], dtype=float)
+    if coef_vs.ndim != 3 or coef_vs.shape[1] != N_VARIABLES:
+        raise ValueError(
+            "Unexpected RRRglobal_beta shape after removing the intercept: "
+            f"{coef_vs.shape}; expected (*, {N_VARIABLES}, time)"
+        )
     rrr_sel_per_neuron = np.abs(coef_vs).sum(2)  # (n_neurons, 8)
 
     # Build per-area selectivity for RRR (same filtering)
@@ -605,13 +647,21 @@ def run_full_selectivity_analysis(neuron_df, save_dir=None, comparison_mode="fal
     print("\n[3] Correlating with anatomical connectivity...")
     try:
         atm = _load_allen_anatomy_from_csv()
-        conn_mat = np.log1p(atm["conn_mat"])
+        # Match the reference analysis, which uses log connectivity.  The
+        # matrix has zero diagonal; off-diagonal entries are positive.
+        conn_mat = np.log(np.clip(atm["conn_mat"], np.finfo(float).tiny, None))
         area2H = atm["area2H"]
         area2mod = atm["area2mod"]
 
+        corr_sel_result = compute_selectivity_from_attributions(
+            neuron_df,
+            min_neurons_per_area=MIN_NEURONS_PER_AREA_CORR,
+            area_list=CORTICAL_AREAS,
+        )
+
         corr_result = correlate_with_anatomy(
-            sel_result["sel_areas"],
-            sel_result["area_order"],
+            corr_sel_result["sel_areas"],
+            corr_sel_result["area_order"],
             conn_mat,
             area2H,
         )
@@ -634,8 +684,8 @@ def run_full_selectivity_analysis(neuron_df, save_dir=None, comparison_mode="fal
     print("\n[5] Comparing with RRR selectivity...")
     allow_local_fallback = comparison_mode != "strict"
     comparison = compare_with_rrr(
-        sel_result["sel_areas"],
-        sel_result["area_order"],
+        corr_sel_result["sel_areas"] if "corr_sel_result" in locals() else sel_result["sel_areas"],
+        corr_sel_result["area_order"] if "corr_sel_result" in locals() else sel_result["area_order"],
         allow_local_fallback=allow_local_fallback,
     )
 

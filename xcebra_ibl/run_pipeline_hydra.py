@@ -80,6 +80,7 @@ def main(cfg: DictConfig) -> None:
             max_iterations=_cfg_value(cfg, "cebra.max_iterations", None),
             batch_size=_cfg_value(cfg, "cebra.batch_size", None),
             n_attribution_samples=_cfg_value(cfg, "cebra.n_attribution_samples", 2000),
+            seed=_cfg_value(cfg, "pipeline.seed", 2025),
             model_kwargs={
                 "model_architecture": _cfg_value(cfg, "cebra.model_architecture", "offset10-model"),
                 "learning_rate": _cfg_value(cfg, "cebra.learning_rate", 3e-4),
