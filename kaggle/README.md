@@ -1,3 +1,8 @@
+> **5 September 2026 update:** The default entry point now runs a one-session calibration for the controlled
+> pilot in `xcebra_ibl.experiments`. See [GPU pilot protocol](../docs/gpu_pilot.md)
+> for calibration, configuration, outputs and limits. The legacy commands below
+> require `KAGGLE_EXPERIMENT_MODE=legacy`; they are not the default scientific run.
+
 # Kaggle GPU workflow
 
 This project uses a private Kaggle dataset containing the local raw IBL

@@ -60,7 +60,8 @@ def main():
         )
 
         os.environ["KAGGLE_INPUT_DIR"] = str(_find_dataset_dir())
-        os.environ["XCEBRA_REFERENCE_DIR"] = str(_find_reference_dir())
+        if os.environ.get("KAGGLE_EXPERIMENT_MODE", "pilot") == "legacy":
+            os.environ["XCEBRA_REFERENCE_DIR"] = str(_find_reference_dir())
         os.environ["KAGGLE_WORKING_DIR"] = "/kaggle/working"
         sys.path.insert(0, REPO_DIR)
 

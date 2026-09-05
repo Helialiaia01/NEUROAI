@@ -38,24 +38,10 @@ def _pipeline_args(argv=None):
     configured = os.environ.get("KAGGLE_PIPELINE_ARGS")
     if configured:
         return shlex.split(configured)
-    # The raw IBL dataset is already mounted; downloading from IBL is not part
-    # of the Kaggle run. Users can override this with KAGGLE_PIPELINE_ARGS.
-    # Streaming prevents Kaggle's small writable volume from filling with all
-    # preprocessed sessions. One checkpoint is attempted per mini-batch, while
-    # only the newest two are retained for safe recovery.
-    # The production run is streaming and bounded so all sessions can fit in
-    # Kaggle's runtime and writable-volume limits. Every mini-batch still
-    # triggers the checkpoint callback; only the newest checkpoint is kept.
-    return [
-        "--stream",
-        "--analyze",
-        "--max-iterations",
-        "500",
-        "--n-attribution-samples",
-        "500",
-        "--checkpoint-retention",
-        "1",
-    ]
+    # Measure cost on one session before dispatching the full controlled grid.
+    return ["--max-sessions", "1", "--seeds", "2025", "--dimensions", "4",
+            "--iterations", "500"]
+
 
 
 def main(argv=None):
@@ -76,9 +62,12 @@ def main(argv=None):
                 print(f"KAGGLE_WORKING_DIR={out_dir}")
                 print(f"Pipeline arguments: {' '.join(sys.argv[1:])}")
 
-                from xcebra_ibl.run_pipeline import main as pipeline_main
-
-                pipeline_main()
+                if os.environ.get("KAGGLE_EXPERIMENT_MODE", "pilot") == "legacy":
+                    from xcebra_ibl.run_pipeline import main as pipeline_main
+                    pipeline_main()
+                else:
+                    from xcebra_ibl.experiments import main as pilot_main
+                    pilot_main(sys.argv[1:])
 
                 # A training run with no discoverable sessions would otherwise
                 # exit successfully after printing a warning. Make that state

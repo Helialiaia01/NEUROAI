@@ -1,24 +1,13 @@
+"""Regularized per-variable CEBRA adaptation with inverted-gradient attribution.
+
+Independent supervised encoders do not implement canonical multiobjective
+xCEBRA. Attribution measures model sensitivity, not causal effects or RRR
+encoding coefficients. Jacobian norm regularization alone does not guarantee
+sparsity or identifiability on IBL recordings.
 """
-xCEBRA Model: Explainable CEBRA with Multi-Group Embeddings and Jacobian Regularization.
 
-This module implements the xCEBRA methodology for the IBL dataset:
-
-1. **Multi-group embedding**: The encoder f = [f₁; ...; f_G] splits its output
-   into G groups (one per behavioral variable), trained with separate InfoNCE
-   losses so each subspace captures a single variable's effect.
-
-2. **Jacobian regularization**: ‖∂f/∂x‖² encourages sparsity in the
-   input-to-embedding mapping, so each embedding dimension depends on a
-   minimal set of neurons → interpretable attribution maps.
-
-3. **Attribution extraction**: After training, compute the per-neuron Jacobian
-   for each variable group to get an analog of the RRR β coefficients.
-
-xCEBRA replaces the linear RRR model with:
-    - A nonlinear encoder (temporal convolutional network)
-    - Contrastive loss instead of reconstruction loss
-    - Jacobian-based attribution instead of linear coefficients
-"""
+import os
+os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
 
 import numpy as np
 import torch
@@ -74,13 +63,9 @@ class XCEBRAModel:
     """
     xCEBRA wrapper for IBL neural data analysis.
 
-    Trains a CEBRA model with multi-group embeddings using separate
-    behavioral variables as auxiliary labels, then extracts per-neuron
-    attribution maps (Jacobians) as the nonlinear analog of RRR β coefficients.
-
-    The key insight: instead of fitting β_{n,v,t} via regression, we learn
-    an embedding f(x) where each subspace f_g(x) is aligned to variable g,
-    and then compute ∂f_g/∂x_n as the "selectivity" of neuron n for variable g.
+    Trains independent supervised encoders and computes mean absolute
+    pseudoinverse-Jacobian attribution. These scores are not RRR coefficients
+    and do not isolate a variable's unique effect when labels are correlated.
 
     Parameters
     ----------
@@ -245,8 +230,8 @@ class XCEBRAModel:
         """
         Strategy A: Train a separate CEBRA model per behavioral variable.
 
-        This is the simplest xCEBRA approach: each model's embedding captures
-        the effect of one variable, and attribution maps are extracted per model.
+        Each independent model is conditioned on one label. This adaptation
+        does not assign identifiable variable slices within a shared encoder.
 
         Parameters
         ----------
@@ -256,6 +241,14 @@ class XCEBRAModel:
             {variable_name: (n_samples,) or (n_samples, 1) label array}
         verbose : bool
         """
+        import random
+        random.seed(self.random_seed)
+        np.random.seed(self.random_seed)
+        torch.use_deterministic_algorithms(True)
+        torch.backends.cudnn.benchmark = False
+        torch.manual_seed(self.random_seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(self.random_seed)
         self.models_ = {}
         self.training_losses_ = {}
         self._set_trial_structure(trial_ids, time_ids, trial_length)
@@ -643,7 +636,7 @@ class XCEBRAModel:
         n_samples = data.shape[0]
         n_features = data.shape[1]
         accumulated_inverse = np.zeros(n_features, dtype=np.float64)
-        n_batches = 0
+        n_accumulated = 0
 
         for start_idx in range(0, n_samples, batch_size):
             end_idx = min(start_idx + batch_size, n_samples)
@@ -715,12 +708,13 @@ class XCEBRAModel:
             jacobian = grads.permute(1, 0, 2).detach().cpu().numpy()
             jacobian = np.asarray(jacobian, dtype=np.float64)
             inverted = np.linalg.pinv(jacobian, rcond=self.jacobian_pinv_rcond)
-            accumulated_inverse += np.abs(inverted).mean(axis=(0, 2))
-            n_batches += 1
+            if not np.isfinite(inverted).all():
+                raise FloatingPointError("Non-finite inverted Jacobian")
+            accumulated_inverse += np.abs(inverted).mean(axis=2).sum(axis=0)
+            n_accumulated += len(inverted)
 
-        # Each batch contributes equally, matching the requested sample-wise
-        # expectation when the final batch is smaller.
-        attributions = accumulated_inverse / max(n_batches, 1)
+        # Weight samples equally, including an incomplete final batch.
+        attributions = accumulated_inverse / max(n_accumulated, 1)
         return attributions
 
     def compute_selectivity_profiles(
@@ -803,6 +797,7 @@ class XCEBRAModel:
 
         # Save metadata
         meta = {
+            "method": "regularized_cebra_adaptation",
             "embedding_dim_per_group": self.embedding_dim_per_group,
             "n_groups": self.n_groups,
             "total_dim": self.total_dim,

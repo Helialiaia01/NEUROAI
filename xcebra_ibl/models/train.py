@@ -521,6 +521,8 @@ def cross_validate_session(
     if test_fraction is None:
         test_fraction = TEST_FRACTION
 
+    if "source_path" not in session_data:
+        raise ValueError("Leakage-safe CV requires source_path; regenerate cached preprocessing or use xcebra_ibl.experiments")
     neural_data = session_data["y_2d"]
     labels = prepare_labels_from_session(session_data)
     K = session_data["K"]
@@ -545,6 +547,12 @@ def cross_validate_session(
 
         train_trials = unique_trials[train_trial_idx]
         test_trials = unique_trials[test_trial_idx]
+
+        fold_session = preprocess_session(session_data["source_path"], fit_trials=train_trials)
+        if fold_session is None:
+            raise ValueError("Fold does not pass training-only preprocessing filters")
+        neural_data = fold_session["y_2d"]
+        labels = prepare_labels_from_session(fold_session)
 
         train_mask = np.isin(trial_ids, train_trials)
         test_mask = np.isin(trial_ids, test_trials)

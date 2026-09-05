@@ -108,7 +108,7 @@ def _find_best_delay_by_cc(beh_signal, neural_data, max_delay=None):
     return (best_delay if success else 10), success
 
 
-def _extract_variable(var_name, temp_data, ks_include, neural_data, K, T, shift_beh=True):
+def _extract_variable(var_name, temp_data, ks_include, neural_data, K, T, shift_beh=True, fit_trials=None):
     """
     Extract a single behavioral variable, matching the brainwide-RRR approach.
 
@@ -167,25 +167,25 @@ def _extract_variable(var_name, temp_data, ks_include, neural_data, K, T, shift_
         beh_raw = temp_data["wheel_vel"][ks_include, :-1]  # (K, T_raw, 1)
         if len(beh_raw.shape) == 2:
             beh_raw = beh_raw[:, :, np.newaxis]
-        return _preprocess_movement(beh_raw, neural_data, shift_beh, delay_info, var_name)
+        return _preprocess_movement(beh_raw, neural_data, shift_beh, delay_info, var_name, fit_trials)
 
     elif var_name == "lick":
         beh_raw = temp_data["licks"][ks_include, :-1]  # (K, T_raw, 1)
         if len(beh_raw.shape) == 2:
             beh_raw = beh_raw[:, :, np.newaxis]
-        return _preprocess_movement(beh_raw, neural_data, shift_beh, delay_info, var_name)
+        return _preprocess_movement(beh_raw, neural_data, shift_beh, delay_info, var_name, fit_trials)
 
     elif var_name == "whisker_max":
         beh_raw = temp_data["whisker_motion"][ks_include, :-1]  # (K, T_raw, 2)
         # Take max of left/right whisker motion energy
         beh_raw = np.max(beh_raw, axis=-1, keepdims=True)  # (K, T_raw, 1)
-        return _preprocess_movement(beh_raw, neural_data, shift_beh, delay_info, var_name)
+        return _preprocess_movement(beh_raw, neural_data, shift_beh, delay_info, var_name, fit_trials)
 
     else:
         raise ValueError(f"Unknown variable: {var_name}")
 
 
-def _preprocess_movement(beh_raw, neural_data, shift_beh, delay_info, var_name):
+def _preprocess_movement(beh_raw, neural_data, shift_beh, delay_info, var_name, fit_trials=None):
     """
     Preprocess a time-varying behavioral variable:
     1. Find optimal time delay via cross-correlation
@@ -193,6 +193,7 @@ def _preprocess_movement(beh_raw, neural_data, shift_beh, delay_info, var_name):
     3. Z-score across trials and time
     """
     K, T, N = neural_data.shape
+    fit_trials = np.arange(K) if fit_trials is None else np.asarray(fit_trials)
     default_delay = 10  # 10 bins = 100 ms
 
     if beh_raw.shape[1] < T + default_delay:
@@ -204,17 +205,19 @@ def _preprocess_movement(beh_raw, neural_data, shift_beh, delay_info, var_name):
 
     if shift_beh:
         for i in range(beh_raw.shape[2]):
-            bd, success = _find_best_delay_by_cc(beh_raw[:, :, i], neural_data)
+            bd, success = _find_best_delay_by_cc(beh_raw[fit_trials, :, i], neural_data[fit_trials])
             delay_info[f"{var_name}_delay_{i}"] = bd
             delay_info[f"{var_name}_success_{i}"] = success
             beh_processed[:, :, i] = beh_raw[:, bd:bd + T, i]
     else:
         beh_processed = beh_raw[:, default_delay:default_delay + T, :]
 
-    # Z-score across all trials and time
-    mean_val = np.mean(beh_processed, axis=(0, 1))
-    std_val = np.std(beh_processed, axis=(0, 1))
+    # Fit scaling on the designated trials only
+    mean_val = np.mean(beh_processed[fit_trials], axis=(0, 1))
+    std_val = np.std(beh_processed[fit_trials], axis=(0, 1))
     std_val = np.clip(std_val, 1e-8, None)
+    delay_info[f"{var_name}_movement_mean"] = mean_val.tolist()
+    delay_info[f"{var_name}_movement_std"] = std_val.tolist()
     beh_processed = (beh_processed - mean_val) / std_val
 
     return beh_processed, delay_info
@@ -237,12 +240,14 @@ def preprocess_session(
     include_areas=None,
     spsdt=None,
     verbose=False,
+    fit_trials=None,
 ):
     """
     Preprocess a single IBL session .npz file.
 
-    This exactly mirrors _read_Xy() from brainwide-RRR to ensure
-    identical preprocessing as the "Rarely Categorical" paper.
+    Uses the reference RRR transforms. With fit_trials, neuron selection,
+    movement alignment and scaling are estimated only from those retained
+    trial indices and applied unchanged to all trials.
 
     Parameters
     ----------
@@ -324,11 +329,17 @@ def preprocess_session(
             print(f"  Skipping: K={K} < min_trials={min_trials}")
         return None
 
+    fit_trials = np.arange(K) if fit_trials is None else np.asarray(fit_trials, dtype=int)
+    if fit_trials.ndim != 1 or len(np.unique(fit_trials)) != fit_trials.size:
+        raise ValueError("fit_trials must be a one-dimensional set of unique indices")
+    if fit_trials.size == 0 or np.any(fit_trials < 0) or np.any(fit_trials >= K):
+        raise ValueError("fit_trials must index retained trials after block filtering")
+
     # ── Neuron selection ──
     # Silent probability < threshold
-    cs = np.mean(np.all(data_allN == 0.0, axis=1), axis=0) < max_sp
+    cs = np.mean(np.all(data_allN[fit_trials] == 0.0, axis=1), axis=0) < max_sp
     # Mean firing rate > threshold
-    cs &= np.mean(data_allN, (0, 1)) / spsdt > min_mfr
+    cs &= np.mean(data_allN[fit_trials], (0, 1)) / spsdt > min_mfr
     # Unit label >= threshold
     good_unit = clusters_g_allN["label"] >= unit_label_min
     cs &= good_unit
@@ -361,7 +372,7 @@ def preprocess_session(
     for var_name in var_list:
         try:
             var_3d, delay_info = _extract_variable(
-                var_name, temp, ks_include, data, K, T, shift_beh=True
+                var_name, temp, ks_include, data, K, T, shift_beh=True, fit_trials=fit_trials
             )
             var_arrays.append(var_3d)
             best_delays.update(delay_info)
@@ -387,8 +398,8 @@ def preprocess_session(
 
     # Z-score per neuron per time bin
     if standardize_y:
-        mean_y = np.mean(y_3d, axis=0)  # (T, N)
-        std_y = np.std(y_3d, axis=0)    # (T, N)
+        mean_y = np.mean(y_3d[fit_trials], axis=0)  # (T, N)
+        std_y = np.std(y_3d[fit_trials], axis=0)    # (T, N)
         std_y = np.clip(std_y, 1e-8, None)
     else:
         mean_y = np.zeros(y_3d.shape[1:])
@@ -397,8 +408,8 @@ def preprocess_session(
 
     # Z-score input variables per variable per time bin
     if standardize_X:
-        mean_X = np.mean(X_3d_raw, axis=0)  # (T, 8)
-        std_X = np.std(X_3d_raw, axis=0)    # (T, 8)
+        mean_X = np.mean(X_3d_raw[fit_trials], axis=0)  # (T, 8)
+        std_X = np.std(X_3d_raw[fit_trials], axis=0)    # (T, 8)
         std_X = np.clip(std_X, 1e-8, None)
     else:
         mean_X = np.zeros(X_3d_raw.shape[1:])
@@ -439,6 +450,7 @@ def preprocess_session(
     eid = _session_id(npz_path)
 
     return {
+        "source_path": str(Path(npz_path).resolve()),
         "X_3d": X_3d,                         # (K, T, 8)
         "labels_3d": labels_3d,               # unscaled categorical labels
         "y_3d": y_3d,                         # (K, T, N)
@@ -464,6 +476,9 @@ def preprocess_session(
             "mean_X_Tv": mean_X,
             "std_X_Tv": std_X,
             "best_delays": best_delays,
+            "fit_trials": fit_trials,
+            "retained_raw_trials": np.flatnonzero(ks_include),
+            "retained_raw_neurons": np.flatnonzero(cs),
             "var_list": var_list,
         },
     }

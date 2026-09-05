@@ -1,0 +1,23 @@
+{
+  "unit_tests": 4,
+  "synthetic_encoder_fits": 16,
+  "iterations_per_fit": 2,
+  "variables": [
+    "wheel",
+    "choice"
+  ],
+  "seeds": [
+    2025,
+    2026
+  ],
+  "dimensions": [
+    2,
+    4
+  ],
+  "nulls": 1,
+  "checkpoint_reload": "passed",
+  "same_config_resume": "passed",
+  "mismatched_config_resume": "refused",
+  "scientific_result": false,
+  "notes": "CPU execution only; NumPy/macOS emitted numerical warnings; saved artifacts were finite."
+}
