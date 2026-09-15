@@ -17,6 +17,30 @@ from xcebra_ibl.models.xcebra_model import XCEBRAModel
 
 
 class ReadinessTests(unittest.TestCase):
+    def test_raw_target_support_excludes_artificial_standardized_variation(self):
+        from xcebra_ibl.experiments import variable_support
+        evaluation = {
+            'train': np.arange(12) < 4,
+            'validation': (np.arange(12) >= 4) & (np.arange(12) < 8),
+            'test': np.arange(12) >= 8,
+        }
+        session = {
+            'raw_label_arrays': {
+                'block': np.tile([0, 1], 6),
+                'lick': np.array([0., 1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0.]),
+            },
+            'label_arrays': {
+                'block': np.tile([0, 1], 6).astype(np.int64),
+                # Per-time normalization can make an event-free split appear variable.
+                'lick': np.arange(12, dtype=np.float32),
+            },
+        }
+        report, eligible = variable_support(session, evaluation, ['block', 'lick'])
+        self.assertEqual(eligible, ['block'])
+        self.assertTrue(report['block']['eligible'])
+        self.assertFalse(report['lick']['eligible'])
+        self.assertEqual(report['lick']['partitions']['test']['variance'], 0.)
+
     def test_automatic_device_preference_and_explicit_cuda_failure(self):
         from cebra.integrations.sklearn.utils import check_device
         for cuda, mps, expected in ((True,True,'cuda'),(False,True,'mps'),(False,False,'cpu')):

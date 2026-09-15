@@ -417,8 +417,10 @@ def preprocess_session(
     # their original integer-valued classes for CEBRA's discrete sampler.
     labels_3d = X_3d.copy()
     label_arrays = {}
+    raw_label_arrays = {}
     label_classes = {}
     for var_idx, var_name in enumerate(var_list):
+        raw_label_arrays[var_name] = X_3d_raw[:, :, var_idx].reshape(K * T)
         if var_name in DISCRETE_VARIABLE_NAMES:
             discrete = np.rint(X_3d_raw[:, :, var_idx]).astype(np.int64)
             labels_3d[:, :, var_idx] = discrete
@@ -453,6 +455,7 @@ def preprocess_session(
         "X_2d": X_2d,                         # (K*T, 8)
         "labels_2d": labels_3d.reshape(K * T, len(var_list)),
         "label_arrays": label_arrays,
+        "raw_label_arrays": raw_label_arrays,
         "label_classes": label_classes,
         "y_2d": y_2d,                         # (K*T, N)
         "trial_ids": trial_ids,               # (K*T,)

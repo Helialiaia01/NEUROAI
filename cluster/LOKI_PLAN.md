@@ -247,10 +247,21 @@ results and must not change training design, access the cluster or invent findin
   slightly increased mean decoding but reduced mean AUROC and average precision
   in this small diagnostic. This passes the GPU execution and finite-output gate,
   but it does not pass a strict attribution-stability gate or justify an IBL claim.
-- The 201 MB calibration NPZ compresses to about 6 MB. A compressed payload was
-  prepared locally after stopping the slower uncompressed transfer. Automatic
-  approval review then blocked the transfer restart because the Codex account hit
-  its usage limit. No workaround was attempted; the partial remote file remains.
+- The 201 MB calibration NPZ was transferred as a 6.3 MB gzip payload. Its
+  compressed and decompressed SHA256 hashes match the Mac exactly. The earlier
+  66,650,112-byte partial NPZ was preserved with a `.partial-66650112` suffix.
+  CUDA preflight passed for the verified session. The first 500-iteration,
+  one-seed, dimension-4 real-session calibration completed under `nohup` with
+  exit status 0 in 704.99 seconds. It produced 145 MB, used 1,884,418,048 bytes
+  peak process RSS, verified all 130 declared artifacts and captured no warnings.
+- Calibration exposed an invalid decoding case: the retained session contains
+  only four raw lick-event trials (one train, three validation and zero test).
+  Per-time normalization created numerical variation in the event-free test
+  target, producing extreme negative R2 values. The pipeline now checks target
+  variation in the raw pre-time-normalization representation for every split,
+  records per-variable support in QC, and omits unsupported session-variable
+  pairs from fitting and scoring. A regression test and the tiny end-to-end
+  integration pass; the real calibration must be rerun under the new code hash.
 - A complete gzip archive of all 205 raw sessions was then prepared locally:
   77,051,581,379 bytes reduced to 2,516,271,304 bytes. Its gzip integrity check
   passed and its listing contains 205 NPZ files. Transfer remains subject to the

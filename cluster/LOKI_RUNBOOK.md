@@ -32,12 +32,15 @@ dependencies installed successfully in `.venv313`, and `pip check` reports no
 broken requirements. Both P6000s passed forward, backward and second-order CUDA
 operations. The tiny Loki integration also passed 32 encoder fits, recovery,
 artifact integrity, merge, subject aggregation, explicit exclusions and offline
-analysis. Still pending: real-session CUDA calibration, representative runtime
-and output-size measurements, interruption recovery under load, and scientific
-pilot acceptance.
+analysis. The first real calibration completed in 704.99 seconds with exit status
+0, 145 MB of output, 1,884,418,048 bytes peak process RSS, 130 verified artifacts
+and no captured warnings. It revealed an unsupported lick target split, leading
+to the raw-target support safeguard described below. Still pending: a calibration
+rerun under that corrected release, interruption recovery under load, and
+scientific pilot acceptance.
 
 Loki is checked out at exact release
-`5761fbca3b10d08b2c4d46a8bacf25a20d778735`, which includes the two-GPU
+`161df97f2a04819d10796dcccaf7a677c5380156`, which includes the two-GPU
 dispatcher, its regression check and the GPU-selectable synthetic recovery
 diagnostic.
 
@@ -190,9 +193,14 @@ for linear decoding and 0.819 for k-NN. Attribution recovery remained variable
 (AUROC 0.472--0.861, mean 0.663; average precision 0.501--0.856, mean 0.692),
 and the 0.01 Jacobian penalty did not improve mean recovery in this two-seed toy
 test. Treat that as a reason to retain repeated seeds and uncertainty reporting.
-It is not evidence about IBL biology. The preflight and real-session CUDA
-calibration remain pending because the first raw session has not completed
-transfer.
+It is not evidence about IBL biology. The first real-session CUDA preflight and
+500-iteration calibration passed operationally. The calibration also found that
+the session had one raw lick-event trial in train, three in validation and none in
+test. The earlier run therefore produced invalid, extreme negative lick R2 values.
+The corrected pipeline checks raw target variation separately in every split,
+records support in `qc.json` and `scores.json`, and excludes unsupported
+session-variable pairs from fitting and scoring. Require a fresh output directory
+after this code change.
 
 **Loki, from the exact release checkout and selected environment**
 
@@ -219,7 +227,7 @@ configuration or environment changes.
 source /media/hdd/mohammadi/thesis/activate.sh
 cd /media/hdd/mohammadi/thesis/NEUROAI
 mkdir -p /media/hdd/mohammadi/thesis/logs /media/hdd/mohammadi/thesis/run
-nohup env PYTHONUNBUFFERED=1 CUDA_VISIBLE_DEVICES=GPU-ddcddfcb-9e9a-2fec-a848-077ca2c870b5 python -m xcebra_ibl.experiments --cohort xcebra_ibl/configs/cohort.json --session-ids 044be2f4-e898-404c-91e2-1285cbada2cd --seeds 2025 --dimensions 4 --iterations 500 --device cuda --output /media/hdd/mohammadi/thesis/outputs/gpu_calibration > /media/hdd/mohammadi/thesis/logs/gpu_calibration.log 2>&1 < /dev/null &
+nohup env PYTHONUNBUFFERED=1 CUDA_VISIBLE_DEVICES=GPU-ddcddfcb-9e9a-2fec-a848-077ca2c870b5 python -m xcebra_ibl.experiments --cohort xcebra_ibl/configs/cohort.json --data-dir /media/hdd/mohammadi/thesis/data/downloaded --session-ids 044be2f4-e898-404c-91e2-1285cbada2cd --seeds 2025 --dimensions 4 --iterations 500 --device cuda --output /media/hdd/mohammadi/thesis/outputs/gpu_calibration > /media/hdd/mohammadi/thesis/logs/gpu_calibration.log 2>&1 < /dev/null &
 echo $! > /media/hdd/mohammadi/thesis/run/gpu_calibration.pid
 ```
 
@@ -298,14 +306,14 @@ and the schedule still preserves rerun and writing time before 8 October 2026.
 
 ## Transfer status
 
-The first calibration session is 210,730,333 bytes locally with SHA256
+The first calibration session is 210,730,333 bytes with SHA256
 `45e19684bcffdef9490d9fe498525404029f7456067611dc4cdd853f051ef6f5`.
-The original uncompressed SSH transfer was stopped after about 33 MB because the
-file compresses to about 6 MB with gzip. A complete compressed payload is prepared
-locally at `/tmp/data_044be2f4-e898-404c-91e2-1285cbada2cd.npz.gz`, SHA256
+The gzip payload and decompressed NPZ were transferred and verified on Loki. The
+compressed SHA256 is
 `b78a1ae86aeaaff277b77f8082304a7afdf87a2d435b20cc888ef12598efff1b`.
-Transfer restart is pending tool approval. After transfer, decompress to the exact
-NPZ filename and require the uncompressed SHA256 above before calibration.
+An earlier 66,650,112-byte partial NPZ was preserved as
+`data_044be2f4-e898-404c-91e2-1285cbada2cd.npz.partial-66650112`; it is not a
+training input and may be removed after the calibration result is secured.
 
 The complete 205-session dataset was also archived locally after the sample check.
 It contains 77,051,581,379 uncompressed bytes and is 2,516,271,304 bytes as

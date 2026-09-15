@@ -22,6 +22,41 @@ from xcebra_ibl.experiment.design import select_sources, block_ids, context_feat
 from xcebra_ibl.experiment.artifacts import write_json, complete, verified, sha256, interruption_status, warning_report
 
 
+def variable_support(session, evaluation, variables):
+    """Require each requested target to vary in every evaluated data split."""
+    report, eligible = {}, []
+    for variable in variables:
+        raw = session['raw_label_arrays'][variable]
+        discrete = np.issubdtype(session['label_arrays'][variable].dtype, np.integer)
+        partitions = {}
+        valid = True
+        for name, mask in evaluation.items():
+            values = raw[mask]
+            if discrete:
+                classes, counts = np.unique(values, return_counts=True)
+                partitions[name] = {
+                    'classes': [float(x) for x in classes],
+                    'class_counts': [int(x) for x in counts],
+                }
+                valid &= len(classes) >= 2
+            else:
+                variance = float(np.var(values, dtype=np.float64))
+                partitions[name] = {
+                    'variance': variance,
+                    'minimum': float(np.min(values)),
+                    'maximum': float(np.max(values)),
+                }
+                valid &= np.isfinite(variance) and variance >= 1e-12
+        report[variable] = {
+            'eligible': bool(valid),
+            'reason': None if valid else 'target_lacks_variation_in_at_least_one_split',
+            'partitions': partitions,
+        }
+        if valid:
+            eligible.append(variable)
+    return report, eligible
+
+
 def run_session(path, out, args):
     if verified(out, 'session_complete.json'):
         return
@@ -42,10 +77,11 @@ def run_session(path, out, args):
     if session is None:
         write_json(out / 'skipped.json', {'reason': 'preprocessing_filters_or_missing_variables'})
         return
-    write_json(out / "qc.json", session_qc(session, splits, blocks, args.subjects.get(session["eid"]), args.areas))
     T, N = session['T'], session['N']
     session['y_2d'] = session['y_2d'].astype(np.float32)
-    if not np.isfinite(session['y_2d']).all() or any(not np.isfinite(a).all() for a in session['label_arrays'].values()):
+    if (not np.isfinite(session['y_2d']).all()
+            or any(not np.isfinite(a).all() for a in session['label_arrays'].values())
+            or any(not np.isfinite(a).all() for a in session['raw_label_arrays'].values())):
         raise ValueError('Non-finite preprocessed data')
     np.savez_compressed(out / 'preprocessing.npz', block_ids=blocks, **{k: v for k, v in session['metadata'].items() if k != 'best_delays'}, **splits)
     write_json(out / 'alignment.json', session['metadata']['best_delays'])
@@ -55,15 +91,23 @@ def run_session(path, out, args):
     interior = np.tile((np.arange(T) >= left) & (np.arange(T) < T-right+1), session['K'])
     masks = {p: np.isin(session['trial_ids'], idx) for p, idx in splits.items()}
     evaluation = {p: masks[p] & interior for p in splits}
+    support, variables = variable_support(session, evaluation, args.variables)
+    qc = session_qc(session, splits, blocks, args.subjects.get(session["eid"]), args.areas)
+    qc['variable_support'] = support
+    qc['excluded_variables'] = [v for v in args.variables if v not in variables]
+    write_json(out / "qc.json", qc)
+    if not variables:
+        write_json(out / 'skipped.json', {'reason': 'no_variable_has_support_in_all_splits'})
+        return
     # Baselines receive the same neural channels and temporal receptive field.
     context_dir = out / '.context'
     raw_features = context_features(session['y_2d'], masks, interior, left, right, context_dir)
-    truth = {v: {p: session['label_arrays'][v][evaluation[p]] for p in splits} for v in args.variables}
+    truth = {v: {p: session['label_arrays'][v][evaluation[p]] for p in splits} for v in variables}
     trial_test = session['trial_ids'][evaluation['test']]
     bootstrap_ids = blocks[trial_test] if args.bootstrap_unit == 'block' else trial_test
     bootstrap_unit = 'held_out_block' if args.bootstrap_unit == 'block' else 'held_out_trial'
     records, baseline_predictions = [], {}
-    for v in args.variables:
+    for v in variables:
         discrete = np.issubdtype(truth[v]['train'].dtype, np.integer)
         for family, result in decode(raw_features, truth[v], discrete, include_knn=False, save_dir=out / "decoders", prefix=v).items():
             prediction = result.pop('prediction')
@@ -90,7 +134,7 @@ def run_session(path, out, args):
                 started = time.monotonic()
                 if torch.cuda.is_available():
                     torch.cuda.reset_peak_memory_stats()
-                train_labels = {v: session['label_arrays'][v][masks['train']] for v in args.variables}
+                train_labels = {v: session['label_arrays'][v][masks['train']] for v in variables}
                 if control:
                     train_labels = shuffle_trials(train_labels, T, args.split_seed + control,
                         groups=blocks[splits['train']] if args.shuffle == 'within_block' else None)
@@ -110,7 +154,7 @@ def run_session(path, out, args):
                     session['time_ids'][mask], T) for p, mask in masks.items()}
                 np.savez_compressed(destination / 'embeddings.npz', **{f'{p}_{v}': e for p, emb in embeddings.items() for v, e in emb.items()})
                 predictions, metrics = {}, {}
-                for v in args.variables:
+                for v in variables:
                     feats = {p: embeddings[p][v][interior[masks[p]]] for p in splits}
                     targets = dict(truth[v])
                     targets['train'] = train_labels[v][interior[masks['train']]]
@@ -129,14 +173,14 @@ def run_session(path, out, args):
                 write_json(destination / 'losses.json', losses)
                 candidates[key] = dict(metrics=metrics, seconds=time.monotonic()-started, seed=seed, dimension=dim, control=control,
                     peak_cuda_bytes=torch.cuda.max_memory_allocated() if torch.cuda.is_available() else None,
-                    changed_supervision={v:bool(np.any(train_labels[v] != session['label_arrays'][v][masks['train']])) for v in args.variables})
+                    changed_supervision={v:bool(np.any(train_labels[v] != session['label_arrays'][v][masks['train']])) for v in variables})
                 complete(destination, candidates[key])
                 del model, embeddings
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
     # Select dimensions by mean validation performance across observed seeds.
     selected = {}
-    for v in args.variables:
+    for v in variables:
         families = next(iter(candidates.values()))['metrics'][v]
         for family in families:
             values = {d: [c['metrics'][v][family]['validation_score'] for c in candidates.values()
@@ -157,8 +201,9 @@ def run_session(path, out, args):
                     **c['metrics'][v][family], **interval(truth[v]['test'], pred, bootstrap_ids, discrete, args.bootstrap, args.split_seed,
                         baseline=baseline_predictions.get(f'{v}_linear', baseline_predictions.get(f'{v}_constant')),
                         unit=bootstrap_unit)))
-    write_json(out / 'stability.json', stability(out, candidates, args.variables, T, left, right))
+    write_json(out / 'stability.json', stability(out, candidates, variables, T, left, right))
     write_json(out / 'scores.json', dict(selected_dimensions=selected, decoding=records,
+        excluded_variables=qc['excluded_variables'], variable_support=support,
         interpretation='Within-session generalization to held-out trials. Nulls are trial-exchangeability diagnostics, not calibrated significance tests.'))
     write_json(out / 'profile.json', dict(seconds=time.monotonic()-started_session,
         process_peak_rss_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * (1 if sys.platform=='darwin' else 1024),
@@ -295,6 +340,12 @@ def main(argv=None):
         'GAUSSIAN_SMOOTH_SIGMA','STANDARDIZE_Y','STANDARDIZE_X','TRANSFORM_MFR','SPSDT','REMOVE_BLOCK5')}
     config['method'] = 'regularized_cebra_adaptation'
     config['dimension_selection'] = 'mean_validation_decoding; stability reported separately'
+    config['target_support'] = {
+        'source': 'pre_time_bin_standardization',
+        'continuous_requirement': 'finite variance >= 1e-12 in train, validation and test',
+        'categorical_requirement': 'at least two classes in train, validation and test',
+        'failure_action': 'exclude the unsupported session-variable pair and record it in QC',
+    }
     config['subject_ids'] = subjects
     config['cohort_sha256'] = sha256(args.cohort) if args.cohort else None
     config['input_units'] = 'firing_rate_hz_reference_export'
