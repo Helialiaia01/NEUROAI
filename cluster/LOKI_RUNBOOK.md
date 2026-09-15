@@ -118,7 +118,7 @@ For these internally uncompressed NPZ files, SSH compression is substantially
 faster. The prepared calibration payload can be sent from the Mac with:
 
 ```sh
-scp -C /tmp/data_044be2f4-e898-404c-91e2-1285cbada2cd.npz.gz mohammadi@100.75.110.13:/media/hdd/mohammadi/thesis/data/downloaded/
+scp /tmp/data_044be2f4-e898-404c-91e2-1285cbada2cd.npz.gz mohammadi@100.75.110.13:/media/hdd/mohammadi/thesis/data/downloaded/
 ```
 
 Then on Loki, decompress and verify it without overwriting an existing final NPZ:
@@ -313,10 +313,11 @@ It contains 77,051,581,379 uncompressed bytes and is 2,516,271,304 bytes as
 205 NPZ files, and its SHA256 is
 `004d9a8f2fcae8be372ab1891ad71c114314f8aaca252e7deca86cac248f0879`.
 Once transfer is permitted, prefer this verified archive over sending 77 GB of
-uncompressed NPZ containers. Send it from the Mac:
+uncompressed NPZ containers. Send it from the Mac with resumable partial-file
+retention:
 
 ```sh
-scp /tmp/ibl_downloaded_205_2026-09-15.tar.gz mohammadi@100.75.110.13:/media/hdd/mohammadi/thesis/
+rsync -avP /tmp/ibl_downloaded_205_2026-09-15.tar.gz mohammadi@100.75.110.13:/media/hdd/mohammadi/thesis/
 ```
 
 On Loki, verify the archive hash and count before extraction:
