@@ -26,12 +26,14 @@ Verified:
 Working assumption authorized by the user: both P6000s are available with no
 time or CPU limit. This has not been confirmed by the supervisor or a scheduler.
 
-The 25 local tests pass, including CUDA/MPS/CPU device preference. These tests have
-not run on Loki. Still pending: the other pinned scientific dependencies,
-`pip check`, the full Loki test suite, a real CUDA operation on each P6000,
-persistence/recovery checks, representative runtime and output-size measurements,
-and scientific pilot acceptance. Do not describe a proposed command below as
-completed evidence.
+The 25 local tests and the same 25 tests on Loki pass. The pinned scientific
+dependencies installed successfully in `.venv313`, and `pip check` reports no
+broken requirements. Both P6000s passed forward, backward and second-order CUDA
+operations. The tiny Loki integration also passed 32 encoder fits, recovery,
+artifact integrity, merge, subject aggregation, explicit exclusions and offline
+analysis. Still pending: real-session CUDA calibration, representative runtime
+and output-size measurements, interruption recovery under load, and scientific
+pilot acceptance.
 
 The root filesystem has only about 19 GB free and is 96% used. Keep the checkout,
 environment, data, temporary files, caches and outputs under `/media/hdd`.
@@ -106,6 +108,25 @@ first, then the required cohort with a resumable tool.
 rsync -a --info=progress2 --partial data/downloaded/ mohammadi@100.75.110.13:/media/hdd/mohammadi/thesis/data/downloaded/
 ```
 
+For these internally uncompressed NPZ files, SSH compression is substantially
+faster. The prepared calibration payload can be sent from the Mac with:
+
+```sh
+scp -C /tmp/data_044be2f4-e898-404c-91e2-1285cbada2cd.npz.gz mohammadi@100.75.110.13:/media/hdd/mohammadi/thesis/data/downloaded/
+```
+
+Then on Loki, decompress and verify it without overwriting an existing final NPZ:
+
+```sh
+cd /media/hdd/mohammadi/thesis/data/downloaded
+gzip -dc data_044be2f4-e898-404c-91e2-1285cbada2cd.npz.gz > data_044be2f4-e898-404c-91e2-1285cbada2cd.npz.new
+sha256sum data_044be2f4-e898-404c-91e2-1285cbada2cd.npz.new
+mv data_044be2f4-e898-404c-91e2-1285cbada2cd.npz.new data_044be2f4-e898-404c-91e2-1285cbada2cd.npz
+```
+
+Require SHA256 `45e19684bcffdef9490d9fe498525404029f7456067611dc4cdd853f051ef6f5`
+before the `mv` command. Delete the compressed copy only after the final file verifies.
+
 Before training, compare session IDs and file counts and verify SHA-256 hashes for
 the selected files on both machines. Avoid a second raw-data copy.
 
@@ -114,11 +135,11 @@ the selected files on both machines. Avoid a second raw-data copy.
 The HDD environment `.venv313` uses `--system-site-packages` so it can reuse the
 verified user Torch described above. It is therefore not isolated from that user
 Torch dependency: record Torch's exact path and version with every environment
-snapshot. Other pinned scientific dependencies are not yet installed. Complete
-their installation in this venv; do not replace the working Torch unless a
-compatibility check requires a reviewed change.
+snapshot. The pinned scientific dependencies are installed in this venv and reuse
+the working Torch. Do not replace that Torch unless a compatibility check requires
+a reviewed change.
 
-**Loki — proposed dependency installation**
+**Loki — completed dependency installation command**
 
 ```sh
 source /media/hdd/mohammadi/thesis/activate.sh
@@ -155,6 +176,10 @@ combination conflicts with the pinned recipe. Resolve other dependencies inside
 wholesale on Linux and do not alter drivers or reboot.
 
 ## 5. Validate before any long run
+
+The unit suite and tiny CPU integration in this section passed on Loki. The
+preflight and real-session CUDA calibration remain pending because the first raw
+session has not completed transfer.
 
 **Loki, from the exact release checkout and selected environment**
 
@@ -201,6 +226,18 @@ two workers through the repository's portable job mechanism; do not manually
 divide a session's grid. First benchmark one worker, then two concurrent workers,
 and record measured throughput rather than assuming a 2x speedup.
 
+After preparing `jobs.json`, launch the tested dispatcher inside `tmux`:
+
+```sh
+source /media/hdd/mohammadi/thesis/activate.sh
+cd /media/hdd/mohammadi/thesis/NEUROAI
+python -m xcebra_ibl.jobs dispatch --manifest JOB_PLAN/jobs.json --data-dir /media/hdd/mohammadi/thesis/data/downloaded --root /media/hdd/mohammadi/thesis/outputs/workers --gpus GPU-ddcddfcb-9e9a-2fec-a848-077ca2c870b5 GPU-13cc3970-fd10-b6f2-630b-75459933e640
+```
+
+Replace `JOB_PLAN` with the prepared plan directory. The dispatcher gives each
+process one GPU UUID, assigns each session index once, and stops scheduling new
+sessions after a failure. The per-session recovery mechanism handles a safe rerun.
+
 After all planned workers pass their completion and integrity checks, merge their
 outputs once and run:
 
@@ -227,3 +264,14 @@ manifests and preprocessing exclusions.
 Do not start the main cohort until both P6000s have passed real CUDA checks, the
 pilot is scientifically accepted, dual-worker runtime and storage are measured,
 and the schedule still preserves rerun and writing time before 8 October 2026.
+
+## Transfer status
+
+The first calibration session is 210,730,333 bytes locally with SHA256
+`45e19684bcffdef9490d9fe498525404029f7456067611dc4cdd853f051ef6f5`.
+The original uncompressed SSH transfer was stopped after about 33 MB because the
+file compresses to about 6 MB with gzip. A complete compressed payload is prepared
+locally at `/tmp/data_044be2f4-e898-404c-91e2-1285cbada2cd.npz.gz`, SHA256
+`b78a1ae86aeaaff277b77f8082304a7afdf87a2d435b20cc888ef12598efff1b`.
+Transfer restart is pending tool approval. After transfer, decompress to the exact
+NPZ filename and require the uncompressed SHA256 above before calibration.

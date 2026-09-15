@@ -141,6 +141,30 @@ class ReadinessTests(unittest.TestCase):
 
 
 class AnalysisAndJobsTests(unittest.TestCase):
+    def test_two_gpu_dispatch_uses_disjoint_workers_and_explicit_cuda(self):
+        from xcebra_ibl.jobs import dispatch
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            manifest=root/'jobs.json'
+            jobs=[{'eid':f's{i}','arguments':['--device','cuda']} for i in range(3)]
+            manifest.write_text(json.dumps({'jobs':jobs}))
+            calls=[]
+            import threading
+            first_pair=threading.Barrier(2)
+            def record(command,env,check):
+                calls.append((command,env['CUDA_VISIBLE_DEVICES'],check))
+                if len(calls) <= 2:
+                    first_pair.wait(timeout=1)
+            with patch('xcebra_ibl.jobs.subprocess.run',side_effect=record):
+                dispatch(manifest,root/'data',root/'workers',['gpu-a','gpu-b'])
+            self.assertEqual({int(c[0][c[0].index('--index')+1]) for c in calls},{0,1,2})
+            self.assertEqual({c[1] for c in calls},{'gpu-a','gpu-b'})
+            self.assertTrue(all(c[2] for c in calls))
+            jobs[0]['arguments']=['--device','cuda_if_available']
+            manifest.write_text(json.dumps({'jobs':jobs}))
+            with self.assertRaises(ValueError):
+                dispatch(manifest,root/'data',root/'workers',['gpu-a','gpu-b'])
+
     def test_excluded_session_is_explicit_and_integrity_checked(self):
         from xcebra_ibl.experiments import main
         with tempfile.TemporaryDirectory() as directory:

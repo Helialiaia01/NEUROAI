@@ -226,6 +226,15 @@ results and must not change training design, access the cluster or invent findin
 - Writer started with the authorized GPT-5.6 Sol medium setting and is restricted
   to the runbook. Local regression suite now passes 25 tests, including automatic
   CUDA/MPS/CPU selection and failure for unavailable explicitly requested CUDA.
-- Dependency discovery, exact source release, data transfer and GPU execution
-  remain in progress. Initial system Python 3.12 was not the Python in which
-  the user installed Torch; its executable points to `/opt/miniconda/bin/python`.
+- Initial dependency discovery used system Python 3.12, which was not the Python
+  in which the user installed Torch; the correct executable is
+  `/opt/miniconda/bin/python`.
+- The exact release `14ab2b2384a9491df4f08e98d6d9e48bd9047a33` was pushed and
+  cloned on Loki. Pinned dependencies installed in `.venv313`; `pip check`, all
+  25 Loki tests and the 32-fit worker/merge integration passed.
+- Both P6000s passed forward, backward and second-order CUDA operations using
+  Torch 2.10.0+cu126. Real-session CUDA calibration remains pending its data.
+- The 201 MB calibration NPZ compresses to about 6 MB. A compressed payload was
+  prepared locally after stopping the slower uncompressed transfer. Automatic
+  approval review then blocked the transfer restart because the Codex account hit
+  its usage limit. No workaround was attempted; the partial remote file remains.

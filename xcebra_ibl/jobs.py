@@ -1,10 +1,14 @@
 """Prepare portable per-session jobs and merge verified results; never submits jobs."""
 import argparse
+from concurrent.futures import ThreadPoolExecutor
+from collections import deque
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
+import threading
 from xcebra_ibl.experiment.artifacts import write_json, sha256, verified
 
 
@@ -92,6 +96,56 @@ def merge(manifest, root, output):
         analyzed_sessions=len(planned)-len(skipped)))
 
 
+def dispatch(manifest, data_dir, root, gpus):
+    """Keep one independent session worker running on each selected GPU."""
+    payload = json.loads(manifest.read_text())
+    if not gpus or len(gpus) != len(set(gpus)):
+        raise ValueError('GPU identifiers must be a nonempty unique list')
+    for job in payload['jobs']:
+        arguments = job['arguments']
+        explicit_cuda = any(
+            token == '--device=cuda' or
+            (token == '--device' and i + 1 < len(arguments) and arguments[i + 1] == 'cuda')
+            for i, token in enumerate(arguments)
+        )
+        if not explicit_cuda:
+            raise ValueError('Two-GPU dispatch requires explicit --device cuda in the study')
+
+    pending = deque(range(len(payload['jobs'])))
+    lock = threading.Lock()
+    stopped = threading.Event()
+    failures = []
+
+    def consume(gpu):
+        while not stopped.is_set():
+            with lock:
+                if not pending:
+                    return
+                index = pending.popleft()
+            eid = payload['jobs'][index]['eid']
+            print(f'Dispatching job {index} ({eid}) to {gpu}', flush=True)
+            environment = os.environ.copy()
+            environment['CUDA_VISIBLE_DEVICES'] = gpu
+            command = [sys.executable, '-m', 'xcebra_ibl.jobs', 'run',
+                       '--manifest', str(manifest), '--index', str(index),
+                       '--data-dir', str(data_dir), '--root', str(root)]
+            try:
+                subprocess.run(command, env=environment, check=True)
+            except BaseException as exc:
+                stopped.set()
+                with lock:
+                    failures.append((index, eid, gpu, exc))
+                return
+
+    with ThreadPoolExecutor(max_workers=len(gpus), thread_name_prefix='gpu-worker') as pool:
+        futures = [pool.submit(consume, gpu) for gpu in gpus]
+        for future in futures:
+            future.result()
+    if failures:
+        index, eid, gpu, exc = failures[0]
+        raise RuntimeError(f'Job {index} ({eid}) failed on {gpu}; no new jobs were scheduled') from exc
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     commands=parser.add_subparsers(dest='action',required=True)
@@ -100,23 +154,29 @@ def main():
     p.add_argument('--study',type=Path,required=True)
     p.add_argument('--output',type=Path,required=True)
     p.add_argument('--phase',choices=['exploratory','confirmatory'],default='exploratory')
-    for action in ('run','merge'):
+    for action in ('run','merge','dispatch'):
         p=commands.add_parser(action)
         p.add_argument('--manifest',type=Path,required=True)
         p.add_argument('--root',type=Path,required=True)
+        if action in {'run','dispatch'}:
+            p.add_argument('--data-dir',type=Path,required=True)
         if action=='run':
             p.add_argument('--index',type=int,required=True)
-            p.add_argument('--data-dir',type=Path,required=True)
-        else:
+        elif action=='merge':
             p.add_argument('--output',type=Path,required=True)
+        else:
+            p.add_argument('--gpus',nargs='+',required=True,
+                           help='GPU UUIDs assigned to independent workers')
     args=parser.parse_args()
     if args.action=='prepare':
         result=prepare(args.cohort,args.study,args.output,args.phase)
         print(f"Prepared {len(result['jobs'])} session jobs; nothing submitted")
     elif args.action=='run':
         run(args.manifest,args.index,args.data_dir,args.root)
-    else:
+    elif args.action=='merge':
         merge(args.manifest,args.root,args.output)
+    else:
+        dispatch(args.manifest,args.data_dir,args.root,args.gpus)
 
 
 if __name__=='__main__':
