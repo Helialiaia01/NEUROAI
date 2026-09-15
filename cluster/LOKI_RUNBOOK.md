@@ -26,7 +26,7 @@ Verified:
 Working assumption authorized by the user: both P6000s are available with no
 time or CPU limit. This has not been confirmed by the supervisor or a scheduler.
 
-The 25 local tests and the same 25 tests on Loki pass. The pinned scientific
+The 26 local tests and the same 26 tests on Loki pass. The pinned scientific
 dependencies installed successfully in `.venv313`, and `pip check` reports no
 broken requirements. Both P6000s passed forward, backward and second-order CUDA
 operations. The tiny Loki integration also passed 32 encoder fits, recovery,
@@ -34,6 +34,10 @@ artifact integrity, merge, subject aggregation, explicit exclusions and offline
 analysis. Still pending: real-session CUDA calibration, representative runtime
 and output-size measurements, interruption recovery under load, and scientific
 pilot acceptance.
+
+Loki is checked out at exact release
+`ac1a8330df3457d7c8a3d5cd02c0f9e3ef241bd6`, which includes the two-GPU
+dispatcher and its regression check.
 
 The root filesystem has only about 19 GB free and is 96% used. Keep the checkout,
 environment, data, temporary files, caches and outputs under `/media/hdd`.

@@ -231,7 +231,8 @@ results and must not change training design, access the cluster or invent findin
   `/opt/miniconda/bin/python`.
 - The exact release `14ab2b2384a9491df4f08e98d6d9e48bd9047a33` was pushed and
   cloned on Loki. Pinned dependencies installed in `.venv313`; `pip check`, all
-  25 Loki tests and the 32-fit worker/merge integration passed.
+  26 Loki tests and the 32-fit worker/merge integration passed. Loki now uses
+  dispatcher release `ac1a8330df3457d7c8a3d5cd02c0f9e3ef241bd6`.
 - Both P6000s passed forward, backward and second-order CUDA operations using
   Torch 2.10.0+cu126. Real-session CUDA calibration remains pending its data.
 - The 201 MB calibration NPZ compresses to about 6 MB. A compressed payload was

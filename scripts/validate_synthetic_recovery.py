@@ -6,6 +6,7 @@ This is a diagnostic, not a claim of canonical xCEBRA identifiability.
 import argparse
 import json
 from pathlib import Path
+import time
 import numpy as np
 from scipy.signal import lfilter
 from sklearn.metrics import roc_auc_score, average_precision_score
@@ -18,7 +19,9 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--iterations',type=int,default=100)
+    parser.add_argument('--device',default='cuda_if_available')
     args=parser.parse_args()
+    started=time.monotonic()
     args.output.mkdir(parents=True,exist_ok=True)
     rng=np.random.default_rng(872)
     K,T,N=40,40,12
@@ -40,7 +43,7 @@ def main():
         for regularization in (0.,.01):
             destination=args.output/f'seed{seed}_reg{regularization}'
             model=XCEBRAModel(max_iterations=args.iterations,batch_size=64,num_hidden_units=32,
-                embedding_dim_per_group=2,device='cpu',random_seed=seed,jacobian_reg_weight=regularization)
+                embedding_dim_per_group=2,device=args.device,random_seed=seed,jacobian_reg_weight=regularization)
             model.fit_per_variable(neural[masks['train']],{v:y[masks['train']] for v,y in labels.items()},
                                    ids[masks['train']],times[masks['train']],T,verbose=False)
             model.save(destination)
@@ -58,7 +61,8 @@ def main():
                     attribution_auroc=float(roc_auc_score(weights[i]!=0,attributions[v])),
                     attribution_average_precision=float(average_precision_score(weights[i]!=0,attributions[v])),
                     decoding_test_r2={family:float(1-np.sum((target['test']-r['prediction'])**2)/np.sum((target['test']-target['test'].mean())**2)) for family,r in results.items()}))
-    write_json(args.output/'report.json',dict(iterations=args.iterations,shape=[K,T,N],weights=weights.tolist(),results=rows,
+    write_json(args.output/'report.json',dict(iterations=args.iterations,requested_device=args.device,
+        seconds=time.monotonic()-started,shape=[K,T,N],weights=weights.tolist(),results=rows,
         interpretation='Learned sparse-graph diagnostic on one toy nonlinear observation model. No IBL or general identifiability claim.'))
 
 
