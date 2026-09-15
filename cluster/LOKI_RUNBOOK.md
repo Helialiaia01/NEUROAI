@@ -35,12 +35,13 @@ artifact integrity, merge, subject aggregation, explicit exclusions and offline
 analysis. The first real calibration completed in 704.99 seconds with exit status
 0, 145 MB of output, 1,884,418,048 bytes peak process RSS, 130 verified artifacts
 and no captured warnings. It revealed an unsupported lick target split, leading
-to the raw-target support safeguard described below. Still pending: a calibration
-rerun under that corrected release, interruption recovery under load, and
-scientific pilot acceptance.
+to the raw-target support safeguard described below. The corrected rerun under
+release `227147a` completed in 606.86 seconds, produced 129 MB, verified 117
+artifacts and captured zero warnings. Still pending: interruption recovery under
+load and scientific pilot acceptance.
 
 Loki is checked out at exact release
-`161df97f2a04819d10796dcccaf7a677c5380156`, which includes the two-GPU
+`227147a4ae81e7ec7e0dcb2e7beddbf21c48d6a6`, which includes the two-GPU
 dispatcher, its regression check and the GPU-selectable synthetic recovery
 diagnostic.
 
@@ -194,13 +195,13 @@ for linear decoding and 0.819 for k-NN. Attribution recovery remained variable
 and the 0.01 Jacobian penalty did not improve mean recovery in this two-seed toy
 test. Treat that as a reason to retain repeated seeds and uncertainty reporting.
 It is not evidence about IBL biology. The first real-session CUDA preflight and
-500-iteration calibration passed operationally. The calibration also found that
+500-iteration calibrations passed operationally. The calibration also found that
 the session had one raw lick-event trial in train, three in validation and none in
 test. The earlier run therefore produced invalid, extreme negative lick R2 values.
 The corrected pipeline checks raw target variation separately in every split,
 records support in `qc.json` and `scores.json`, and excludes unsupported
-session-variable pairs from fitting and scoring. Require a fresh output directory
-after this code change.
+session-variable pairs from fitting and scoring. The corrected run excluded
+`lick`, retained seven variables, and finished with verified artifacts.
 
 **Loki, from the exact release checkout and selected environment**
 

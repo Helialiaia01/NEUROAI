@@ -261,7 +261,9 @@ results and must not change training design, access the cluster or invent findin
   variation in the raw pre-time-normalization representation for every split,
   records per-variable support in QC, and omits unsupported session-variable
   pairs from fitting and scoring. A regression test and the tiny end-to-end
-  integration pass; the real calibration must be rerun under the new code hash.
+  integration pass. The corrected rerun under release `227147a` completed in
+  606.86 seconds, produced 129 MB and verified 117 artifacts with zero warnings;
+  it excluded `lick` and retained seven supported variables.
 - A complete gzip archive of all 205 raw sessions was then prepared locally:
   77,051,581,379 bytes reduced to 2,516,271,304 bytes. Its gzip integrity check
   passed and its listing contains 205 NPZ files. Transfer remains subject to the
