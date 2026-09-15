@@ -17,8 +17,9 @@ Verified:
 - User Torch is 2.10.0+cu126 at
   `/home/mohammadi/.local/lib/python3.13/site-packages`. CUDA is available, and
   the build contains sm50, sm60, sm70, sm75, sm80, sm86 and sm90 support.
-- Loki has 40 logical CPUs, 110 GiB RAM (about 85 GiB available), and `tmux`.
-  No `sbatch` or `srun` was found.
+- Loki has 40 logical CPUs, 110 GiB RAM (about 85 GiB available), `nohup` and
+  `tmux`. Use `nohup` for real training as requested. No `sbatch` or `srun` was
+  found.
 - The two intended P6000s are
   `GPU-ddcddfcb-9e9a-2fec-a848-077ca2c870b5` and
   `GPU-13cc3970-fd10-b6f2-630b-75459933e640`. Exclude the K620.
@@ -36,8 +37,9 @@ and output-size measurements, interruption recovery under load, and scientific
 pilot acceptance.
 
 Loki is checked out at exact release
-`ac1a8330df3457d7c8a3d5cd02c0f9e3ef241bd6`, which includes the two-GPU
-dispatcher and its regression check.
+`5761fbca3b10d08b2c4d46a8bacf25a20d778735`, which includes the two-GPU
+dispatcher, its regression check and the GPU-selectable synthetic recovery
+diagnostic.
 
 The root filesystem has only about 19 GB free and is 96% used. Keep the checkout,
 environment, data, temporary files, caches and outputs under `/media/hdd`.
@@ -181,9 +183,16 @@ wholesale on Linux and do not alter drivers or reboot.
 
 ## 5. Validate before any long run
 
-The unit suite and tiny CPU integration in this section passed on Loki. The
-preflight and real-session CUDA calibration remain pending because the first raw
-session has not completed transfer.
+The unit suite and tiny CPU integration in this section passed on Loki. A
+1,000-iteration synthetic CUDA diagnostic also completed on one P6000 in 553.0
+seconds, writing 3.2 MB with finite recorded diagnostics. Mean test R2 was 0.778
+for linear decoding and 0.819 for k-NN. Attribution recovery remained variable
+(AUROC 0.472--0.861, mean 0.663; average precision 0.501--0.856, mean 0.692),
+and the 0.01 Jacobian penalty did not improve mean recovery in this two-seed toy
+test. Treat that as a reason to retain repeated seeds and uncertainty reporting.
+It is not evidence about IBL biology. The preflight and real-session CUDA
+calibration remain pending because the first raw session has not completed
+transfer.
 
 **Loki, from the exact release checkout and selected environment**
 
@@ -209,7 +218,9 @@ configuration or environment changes.
 ```sh
 source /media/hdd/mohammadi/thesis/activate.sh
 cd /media/hdd/mohammadi/thesis/NEUROAI
-CUDA_VISIBLE_DEVICES=GPU-ddcddfcb-9e9a-2fec-a848-077ca2c870b5 python -m xcebra_ibl.experiments --cohort xcebra_ibl/configs/cohort.json --session-ids 044be2f4-e898-404c-91e2-1285cbada2cd --seeds 2025 --dimensions 4 --iterations 500 --device cuda --output /media/hdd/mohammadi/thesis/outputs/gpu_calibration
+mkdir -p /media/hdd/mohammadi/thesis/logs /media/hdd/mohammadi/thesis/run
+nohup env PYTHONUNBUFFERED=1 CUDA_VISIBLE_DEVICES=GPU-ddcddfcb-9e9a-2fec-a848-077ca2c870b5 python -m xcebra_ibl.experiments --cohort xcebra_ibl/configs/cohort.json --session-ids 044be2f4-e898-404c-91e2-1285cbada2cd --seeds 2025 --dimensions 4 --iterations 500 --device cuda --output /media/hdd/mohammadi/thesis/outputs/gpu_calibration > /media/hdd/mohammadi/thesis/logs/gpu_calibration.log 2>&1 < /dev/null &
+echo $! > /media/hdd/mohammadi/thesis/run/gpu_calibration.pid
 ```
 
 Confirm finite outputs, regularization and attribution execution, warnings,
@@ -221,8 +232,8 @@ representative timing at 1,000 iterations before estimating the full budget.
 Use one independent full-session-grid worker per P6000. Do not split one model
 across GPUs and do not introduce DDP. Each worker must have one GPU UUID, disjoint
 session IDs, a shared immutable manifest and a separate output directory. Use
-`tmux` for persistence because no Slurm commands were found. Limit CPU threads if
-the two workers contend during CPU baselines.
+`nohup` with a log and PID file for persistence because no Slurm commands were
+found. Limit CPU threads if the two workers contend during CPU baselines.
 
 The approved three-session pilot is three seeds, dimensions 2/4/8 and 500
 iterations: 432 encoder fits before exclusions. Assign whole sessions between the
@@ -230,17 +241,33 @@ two workers through the repository's portable job mechanism; do not manually
 divide a session's grid. First benchmark one worker, then two concurrent workers,
 and record measured throughput rather than assuming a 2x speedup.
 
-After preparing `jobs.json`, launch the tested dispatcher inside `tmux`:
+After preparing `jobs.json`, launch the tested dispatcher through `nohup`. The
+log and PID file allow the SSH session to close without terminating training:
 
 ```sh
 source /media/hdd/mohammadi/thesis/activate.sh
 cd /media/hdd/mohammadi/thesis/NEUROAI
-python -m xcebra_ibl.jobs dispatch --manifest JOB_PLAN/jobs.json --data-dir /media/hdd/mohammadi/thesis/data/downloaded --root /media/hdd/mohammadi/thesis/outputs/workers --gpus GPU-ddcddfcb-9e9a-2fec-a848-077ca2c870b5 GPU-13cc3970-fd10-b6f2-630b-75459933e640
+mkdir -p /media/hdd/mohammadi/thesis/logs /media/hdd/mohammadi/thesis/run
+nohup env PYTHONUNBUFFERED=1 python -m xcebra_ibl.jobs dispatch --manifest JOB_PLAN/jobs.json --data-dir /media/hdd/mohammadi/thesis/data/downloaded --root /media/hdd/mohammadi/thesis/outputs/workers --gpus GPU-ddcddfcb-9e9a-2fec-a848-077ca2c870b5 GPU-13cc3970-fd10-b6f2-630b-75459933e640 > /media/hdd/mohammadi/thesis/logs/pilot_dispatch.log 2>&1 < /dev/null &
+echo $! > /media/hdd/mohammadi/thesis/run/pilot_dispatch.pid
 ```
 
 Replace `JOB_PLAN` with the prepared plan directory. The dispatcher gives each
 process one GPU UUID, assigns each session index once, and stops scheduling new
 sessions after a failure. The per-session recovery mechanism handles a safe rerun.
+
+Check a detached job from a later SSH login:
+
+```sh
+PID=$(cat /media/hdd/mohammadi/thesis/run/pilot_dispatch.pid)
+kill -0 "$PID" 2>/dev/null && echo RUNNING || echo NOT_RUNNING
+tail -n 100 /media/hdd/mohammadi/thesis/logs/pilot_dispatch.log
+nvidia-smi
+```
+
+`NOT_RUNNING` means the process exited; it does not by itself distinguish success
+from failure. Require the job completion records and artifact integrity checks
+before merging. Keep the log and PID file with the run record.
 
 After all planned workers pass their completion and integrity checks, merge their
 outputs once and run:
@@ -279,3 +306,27 @@ locally at `/tmp/data_044be2f4-e898-404c-91e2-1285cbada2cd.npz.gz`, SHA256
 `b78a1ae86aeaaff277b77f8082304a7afdf87a2d435b20cc888ef12598efff1b`.
 Transfer restart is pending tool approval. After transfer, decompress to the exact
 NPZ filename and require the uncompressed SHA256 above before calibration.
+
+The complete 205-session dataset was also archived locally after the sample check.
+It contains 77,051,581,379 uncompressed bytes and is 2,516,271,304 bytes as
+`/tmp/ibl_downloaded_205_2026-09-15.tar.gz`. `gzip -t` passed, the archive lists
+205 NPZ files, and its SHA256 is
+`004d9a8f2fcae8be372ab1891ad71c114314f8aaca252e7deca86cac248f0879`.
+Once transfer is permitted, prefer this verified archive over sending 77 GB of
+uncompressed NPZ containers. Send it from the Mac:
+
+```sh
+scp /tmp/ibl_downloaded_205_2026-09-15.tar.gz mohammadi@100.75.110.13:/media/hdd/mohammadi/thesis/
+```
+
+On Loki, verify the archive hash and count before extraction:
+
+```sh
+cd /media/hdd/mohammadi/thesis
+sha256sum ibl_downloaded_205_2026-09-15.tar.gz
+tar -tzf ibl_downloaded_205_2026-09-15.tar.gz | grep -c '/data_.*\.npz$'
+tar -xzf ibl_downloaded_205_2026-09-15.tar.gz -C data
+```
+
+Require the recorded SHA256 and count 205 before extraction. This produces
+`data/downloaded`; retain the archive until file-count and calibration checks pass.

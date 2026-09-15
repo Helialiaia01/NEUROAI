@@ -1,4 +1,4 @@
-"""CPU diagnostic of learned attribution on a known sparse generative graph.
+"""Diagnostic of learned attribution on a known sparse generative graph.
 
 Run from the repository root with python -m scripts.validate_synthetic_recovery.
 This is a diagnostic, not a claim of canonical xCEBRA identifiability.

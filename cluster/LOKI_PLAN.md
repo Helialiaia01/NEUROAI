@@ -220,11 +220,13 @@ results and must not change training design, access the cluster or invent findin
   free; root has about 19 GB free (96% used). No supervisor permission is needed
   for this verified project path.
 - Loki has 40 logical CPUs and 110 GiB RAM, with about 85 GiB available during
-  inspection. `tmux` is installed; `sbatch` and `srun` were not on PATH.
+  inspection. `tmux` and `nohup` are available; `sbatch` and `srun` were not on
+  PATH. The user selected `nohup` with log and PID files for real training so jobs
+  survive SSH disconnection.
 - User authorized assuming both P6000s available with no CPU/time limits; this
   is an explicit working assumption, not a supervisor-confirmed allocation.
-- Writer started with the authorized GPT-5.6 Sol medium setting and is restricted
-  to the runbook. Local regression suite now passes 25 tests, including automatic
+- Writer completed the runbook with the authorized GPT-5.6 Sol medium setting.
+  The local regression suite now passes 26 tests, including automatic
   CUDA/MPS/CPU selection and failure for unavailable explicitly requested CUDA.
 - Initial dependency discovery used system Python 3.12, which was not the Python
   in which the user installed Torch; the correct executable is
@@ -232,10 +234,24 @@ results and must not change training design, access the cluster or invent findin
 - The exact release `14ab2b2384a9491df4f08e98d6d9e48bd9047a33` was pushed and
   cloned on Loki. Pinned dependencies installed in `.venv313`; `pip check`, all
   26 Loki tests and the 32-fit worker/merge integration passed. Loki now uses
-  dispatcher release `ac1a8330df3457d7c8a3d5cd02c0f9e3ef241bd6`.
+  release `5761fbca3b10d08b2c4d46a8bacf25a20d778735`, including the two-GPU
+  dispatcher and the GPU-selectable synthetic recovery diagnostic.
 - Both P6000s passed forward, backward and second-order CUDA operations using
   Torch 2.10.0+cu126. Real-session CUDA calibration remains pending its data.
+- A 1,000-iteration synthetic diagnostic completed on a P6000 in 553.0 seconds
+  and wrote 3.2 MB. All 64,000 recorded numeric diagnostic values were finite.
+  Across two seeds and two regularization settings, mean test R2 was 0.778 for
+  linear decoding and 0.819 for k-NN decoding. Attribution support recovery was
+  less stable: AUROC ranged from 0.472 to 0.861 (mean 0.663), and average
+  precision ranged from 0.501 to 0.856 (mean 0.692). The 0.01 Jacobian penalty
+  slightly increased mean decoding but reduced mean AUROC and average precision
+  in this small diagnostic. This passes the GPU execution and finite-output gate,
+  but it does not pass a strict attribution-stability gate or justify an IBL claim.
 - The 201 MB calibration NPZ compresses to about 6 MB. A compressed payload was
   prepared locally after stopping the slower uncompressed transfer. Automatic
   approval review then blocked the transfer restart because the Codex account hit
   its usage limit. No workaround was attempted; the partial remote file remains.
+- A complete gzip archive of all 205 raw sessions was then prepared locally:
+  77,051,581,379 bytes reduced to 2,516,271,304 bytes. Its gzip integrity check
+  passed and its listing contains 205 NPZ files. Transfer remains subject to the
+  same approval blocker; no remote archive was created.
