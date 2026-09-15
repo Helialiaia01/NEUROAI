@@ -65,5 +65,41 @@ class ExperimentTests(unittest.TestCase):
         np.testing.assert_allclose(a, b, rtol=1e-5)
 
 
+
+class TrialSamplerTests(unittest.TestCase):
+    def prepare(self):
+        from cebra import CEBRA
+        from xcebra_ibl.models.trials import install_trial_safe_expander, install_trial_safe_differences
+        self.ids = np.repeat(np.arange(4), 30)
+        x = np.random.default_rng(0).normal(size=(120, 6)).astype('float32')
+        labels = (np.arange(120) % 30 + self.ids*100).astype('float32')[:, None]
+        model = CEBRA(model_architecture='offset10-model', output_dimension=4,
+                      batch_size=16, max_iterations=1, time_offsets=10, device='cpu')
+        _, _, self.loader, _ = model._prepare_fit(x, labels)
+        install_trial_safe_expander(self.loader.dataset, self.ids, 30)
+        install_trial_safe_differences(self.loader, self.ids)
+
+    def test_differences_never_cross_trials(self):
+        self.prepare()
+        self.assertEqual(len(self.loader.distribution.time_difference), 80)
+        np.testing.assert_allclose(self.loader.distribution.time_difference.numpy(), 10.)
+
+    def test_padding_preserves_center_and_trial(self):
+        self.prepare()
+        left = int(self.loader.dataset.offset.left)
+        for center in (0, 29, 30, 59, 60, 119):
+            window = self.loader.dataset.expand_index(np.array([center])).numpy()[0]
+            self.assertEqual(window[left], center)
+            self.assertTrue(np.all(self.ids[window] == self.ids[center]))
+
+    def test_discontiguous_and_short_trials_rejected(self):
+        from xcebra_ibl.models.trials import validate_trials, install_trial_safe_expander
+        with self.assertRaises(ValueError):
+            validate_trials([0,0,1,1,0,0], 2)
+        self.prepare()
+        with self.assertRaises(ValueError):
+            install_trial_safe_expander(self.loader.dataset, np.repeat(np.arange(60),2),2)
+
+
 if __name__ == '__main__':
     unittest.main()

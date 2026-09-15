@@ -1,0 +1,178 @@
+{
+  "date": "2026-09-09",
+  "scientific_gpu_result": false,
+  "unit_tests": {
+    "passed": 24,
+    "failed": 0,
+    "command": "python -m unittest discover -s tests -v"
+  },
+  "integration": {
+    "status": "passed",
+    "sessions": 2,
+    "explicitly_excluded_sessions": 1,
+    "encoder_fits": 32,
+    "iterations_per_fit": 3,
+    "checks": [
+      "workers",
+      "same-config resume",
+      "artifact integrity",
+      "manifest provenance",
+      "subject aggregation",
+      "explicit exclusions",
+      "offline analysis"
+    ],
+    "scientific_result": false,
+    "code_sha256": "b0589017fd9889cd730691175ba9e619f349ee054ab560874c929d422ae90065"
+  },
+  "real_session": {
+    "eid": "044be2f4-e898-404c-91e2-1285cbada2cd",
+    "neurons": 54,
+    "retained_trials": 402,
+    "time_bins": 100,
+    "splits": {
+      "train": 242,
+      "validation": 80,
+      "test": 80
+    },
+    "encoder_fits": 16,
+    "iterations_per_fit": 3,
+    "seconds": 43.99714945896994,
+    "process_peak_rss_bytes": 789020672,
+    "note": "RSS is the process high-water mark, not isolated session memory",
+    "packages": {
+      "numpy": "2.2.6",
+      "torch": "2.10.0",
+      "cebra": "0.6.0",
+      "scikit-learn": "1.8.0",
+      "scipy": "1.17.1"
+    },
+    "code_sha256": "0e1f7e6eaafd0e1d4ff4458980ae98582c805d8df33d3f92f418dab5ef9fbb99",
+    "sources": [
+      {
+        "name": "data_044be2f4-e898-404c-91e2-1285cbada2cd.npz",
+        "sha256": "45e19684bcffdef9490d9fe498525404029f7456067611dc4cdd853f051ef6f5"
+      }
+    ]
+  },
+  "learned_synthetic": {
+    "iterations": 100,
+    "shape": [
+      40,
+      40,
+      12
+    ],
+    "results": [
+      {
+        "seed": 2025,
+        "regularization": 0.0,
+        "variable": "wheel",
+        "attribution_auroc": 0.75,
+        "attribution_average_precision": 0.7513888888888888,
+        "decoding_test_r2": {
+          "linear": 0.7399616241455078,
+          "knn": 0.7759680151939392
+        }
+      },
+      {
+        "seed": 2025,
+        "regularization": 0.0,
+        "variable": "whisker_max",
+        "attribution_auroc": 0.5,
+        "attribution_average_precision": 0.5994047619047619,
+        "decoding_test_r2": {
+          "linear": 0.7144726514816284,
+          "knn": 0.7366781830787659
+        }
+      },
+      {
+        "seed": 2025,
+        "regularization": 0.01,
+        "variable": "wheel",
+        "attribution_auroc": 0.7777777777777779,
+        "attribution_average_precision": 0.7662698412698411,
+        "decoding_test_r2": {
+          "linear": 0.7452857494354248,
+          "knn": 0.7937007546424866
+        }
+      },
+      {
+        "seed": 2025,
+        "regularization": 0.01,
+        "variable": "whisker_max",
+        "attribution_auroc": 0.5,
+        "attribution_average_precision": 0.5954064454064454,
+        "decoding_test_r2": {
+          "linear": 0.7564996480941772,
+          "knn": 0.7892212867736816
+        }
+      },
+      {
+        "seed": 2026,
+        "regularization": 0.0,
+        "variable": "wheel",
+        "attribution_auroc": 0.4722222222222222,
+        "attribution_average_precision": 0.5009620009620009,
+        "decoding_test_r2": {
+          "linear": 0.6699160933494568,
+          "knn": 0.6981009244918823
+        }
+      },
+      {
+        "seed": 2026,
+        "regularization": 0.0,
+        "variable": "whisker_max",
+        "attribution_auroc": 0.47222222222222227,
+        "attribution_average_precision": 0.4958694083694084,
+        "decoding_test_r2": {
+          "linear": 0.7290985584259033,
+          "knn": 0.7385571599006653
+        }
+      },
+      {
+        "seed": 2026,
+        "regularization": 0.01,
+        "variable": "wheel",
+        "attribution_auroc": 0.5,
+        "attribution_average_precision": 0.51005291005291,
+        "decoding_test_r2": {
+          "linear": 0.6920663714408875,
+          "knn": 0.7018382549285889
+        }
+      },
+      {
+        "seed": 2026,
+        "regularization": 0.01,
+        "variable": "whisker_max",
+        "attribution_auroc": 0.5277777777777778,
+        "attribution_average_precision": 0.5292027417027417,
+        "decoding_test_r2": {
+          "linear": 0.7162821292877197,
+          "knn": 0.7417617440223694
+        }
+      }
+    ],
+    "passed_identifiability": false,
+    "interpretation": "Learned sparse-graph diagnostic on one toy nonlinear observation model. No IBL or general identifiability claim."
+  },
+  "static_checks": [
+    "Python compilation passed",
+    "Slurm shell syntax passed",
+    "git diff --check passed"
+  ],
+  "artifacts": {
+    "outputs/pre_gpu_validation/tests-final.log": "934ebe409056c71ff8561ff3f3c95427f82ae1e4810f3215f56012750b07c656",
+    "outputs/pre_gpu_validation/integration-final-v2/verification.json": "3591f0e488c534dc6d8afa64d2943499399a7d484f751de4007c19dc7459c2f3",
+    "outputs/pre_gpu_validation/integration-final-v2/merged/merge_manifest.json": "615e2cbb609191f65c024a41a39eb2a68bc143f645ce0e2707d025e9976cc810",
+    "outputs/pre_gpu_validation/real-session-final/manifest.json": "4b931a8c3cc496fd6159900a1e6128e69da91a32e04b47737458a43c63ab7ad2",
+    "outputs/pre_gpu_validation/real-session-final/044be2f4-e898-404c-91e2-1285cbada2cd/profile.json": "c29d4e2a07e45fbbef7ffbba540956ab88ca9fc875bed01a6e50f372e5326f1d",
+    "outputs/pre_gpu_validation/recovery-v1/report.json": "44b8e4da60c13fe501d8945b345f37ac0ed213e81f6e00518249200e5830ff14"
+  },
+  "limitations": [
+    "No GPU or NAS job launched; Linux/CUDA environment untested",
+    "NumPy 2.2.0 and 2.2.6 macOS matrix-operation warnings remain unresolved despite finite outputs",
+    "Optional NumPy 2.4.1 installation was rejected by automatic approval review citing an account usage limit; existing environment unchanged",
+    "Published RRR export unavailable; public LFS media URL returned HTTP 404",
+    "Subject IDs unknown; reserved cohort is session-level",
+    "Synthetic attribution AUROC is inconsistent; no biological support recovery claim"
+  ]
+}

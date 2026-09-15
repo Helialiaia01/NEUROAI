@@ -40,7 +40,7 @@ def _pipeline_args(argv=None):
         return shlex.split(configured)
     # Measure cost on one session before dispatching the full controlled grid.
     return ["--max-sessions", "1", "--seeds", "2025", "--dimensions", "4",
-            "--iterations", "500"]
+            "--iterations", "500", "--device", "cuda"]
 
 
 

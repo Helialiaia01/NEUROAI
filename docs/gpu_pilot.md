@@ -1,111 +1,133 @@
-# GPU pilot protocol — 5 September 2026
+# GPU pilot protocol — updated 9 September 2026
+
+The local implementation and CPU checks are complete for the pre-GPU plan.
+GPU convergence, numerical compatibility and scientific recovery remain to be
+validated. See [PLAN.md](../PLAN.md), the [analysis protocol](analysis_protocol.md)
+and the [verification record](pre_gpu_verification_2026-09-09.md).
 
 ## Purpose and method decision
 
-The executable pilot addresses held-out behavioural decoding and representation
-stability, the first and third thesis research questions. Use the name
-**regularized per-variable CEBRA adaptation**. Each variable has an independent
-supervised encoder with Jacobian regularization and inverted-gradient
-attribution. This is not canonical multiobjective xCEBRA, whose official demo
-uses multiple objectives and output slices in a shared encoder:
-https://cebra.ai/docs/demo_notebooks/Demo_xCEBRA_RatInABox.html
+Use the name **regularized per-variable CEBRA adaptation**. Each task variable
+supervises an independent encoder, with Jacobian regularization and pseudoinverse
+attribution. The implementation does not claim to be canonical multiobjective
+xCEBRA with shared output slices; see the
+[official demonstration](https://cebra.ai/docs/demo_notebooks/Demo_xCEBRA_RatInABox.html).
+The thesis compares held-out decoding, neuron-profile structure and consistency
+across dimensions/seeds. Encoding and decoding answer different questions.
 
-Attributions describe sensitivity in training-standardized neural coordinates.
-They are neither causal effects nor unique contributions of correlated labels,
-and their magnitudes are not directly comparable to RRR coefficients.
+Attribution is sensitivity in training-standardized neural coordinates, not a
+causal effect or a unique contribution of correlated labels. The learned synthetic
+check decoded its latent variables but did not reliably recover neuron support.
+Use longer synthetic calibration before interpreting neuron-level findings.
 
-## Run sequence
+## Data and evaluation
 
-From the repository root, first measure runtime and memory on one session:
+The frozen cohort has 164 exploratory and 41 reserved confirmatory sessions from
+205 raw NPZ files. Existing model sessions were excluded from the reserve. Subject
+IDs are unknown; add verified metadata before freezing an animal-level design.
+Supplying `--cohort` selects its entire requested phase unless `--session-ids` is
+also supplied; `--max-sessions` only applies without a cohort. Always select the
+small pilot explicitly. Confirmatory runs require a cohort and one frozen dimension.
+
+Each session uses a fixed 60/20/20 trial split. Training trials determine neuron
+filters, movement alignment and scaling; smoothing stays within trials. Cortical
+areas are explicitly selected by default. QC records raw identities, retained
+counts, class coverage, units and outcome semantics. This is offline decoding:
+symmetric smoothing and neural temporal context can use future bins.
+
+Training windows use centre-preserving replication at each trial edge, matching
+inference. Continuous label differences use within-trial transitions only.
+Decoding uses interior bins. Matched neural-context Ridge/logistic baselines and
+linear/kNN embedding decoders fit scaling on training data and select parameters
+on validation data. Dimensions are selected by mean validation decoding across
+seeds. kNN measures the representation/decoder combination; the primary contrast
+uses linear decoders on both neural windows and embeddings.
+
+Behaviour-to-neuron Ridge and rank-projected Ridge encoding are saved separately.
+They are local time-resolved baselines, not the published global RRR estimator.
+Original RRR comparison strictly requires a genuine identity-matched export.
+
+The null jointly permutes whole training-trial label trajectories and retrains
+encoders/decoders. Validation/test labels stay unchanged. `--shuffle within_block`
+restricts permutation to original prior-block runs; saved `changed_supervision`
+reveals labels that this control preserves. One null is a pilot diagnostic, not a
+calibrated significance distribution. Trial bootstrap intervals include paired
+improvement over the matched baseline; `--bootstrap-unit block` assesses dependence
+sensitivity. Aggregation averages seeds within sessions and, when all subject IDs
+are known, sessions within subjects. One resampling unit has no interval.
+
+## Run sequence after compute access is available
+
+Build the [training environment](../environments/README.md). From the repository
+root, inspect the selected data and environment without training:
 
 ```sh
-python -m xcebra_ibl.experiments --max-sessions 1 --seeds 2025 --dimensions 4 --iterations 500 --output outputs/gpu_calibration
+python -m xcebra_ibl.experiments --cohort xcebra_ibl/configs/cohort.json --session-ids 044be2f4-e898-404c-91e2-1285cbada2cd --preflight-only --device cuda --output outputs/preflight
 ```
 
-Then run the controlled pilot:
+Calibrate one exploratory session (16 encoder fits, including controls):
 
 ```sh
-python -m xcebra_ibl.experiments --max-sessions 3 --seeds 2025 2026 2027 --dimensions 2 4 8 --iterations 500 --output outputs/gpu_pilot
+python -m xcebra_ibl.experiments --cohort xcebra_ibl/configs/cohort.json --session-ids 044be2f4-e898-404c-91e2-1285cbada2cd --seeds 2025 --dimensions 4 --iterations 500 --device cuda --output outputs/gpu_calibration
 ```
 
-Kaggle now defaults to the one-session calibration run. `KAGGLE_PIPELINE_ARGS`
-overrides its arguments. For the full controlled grid, set it to
-`--max-sessions 3 --seeds 2025 2026 2027 --dimensions 2 4 8 --iterations 500`.
-`KAGGLE_EXPERIMENT_MODE=legacy` explicitly restores the previous pipeline CLI.
-The pilot does not require the unavailable original RRR result export.
+Then run an explicitly selected three-session pilot:
 
-The full pilot grid is **432 encoder fits**, including controls, not three fits.
-Use measured per-fit runtime before committing GPU allocation. Checkpoints are
-written every 100 iterations, retaining one per variable; final models are also
-saved. Completed seed/dimension/control combinations are reused only when the
-manifest (code, inputs, configuration and runtime) matches. Interrupted
-combinations restart; optimizer-step resume is not implemented. A changed
-configuration requires a new output directory. Existing results are preserved.
+```sh
+python -m xcebra_ibl.experiments --cohort xcebra_ibl/configs/cohort.json --session-ids 1a507308-c63a-4e02-8f32-3239a07dc578 288bfbf3-3700-4abe-b6e4-130b5c541e61 6c6b0d06-6039-4525-a74b-58cfaa1d3a60 --seeds 2025 2026 2027 --dimensions 2 4 8 --iterations 500 --device cuda --output outputs/gpu_pilot
+python -m xcebra_ibl.analysis.pilot --input outputs/gpu_pilot --output outputs/gpu_pilot_analysis --null-draws 99
+```
 
-Only increase iterations toward 10,000 after checking loss trajectories,
-validation scores, observed-versus-null decoding, seed stability, runtime and
-memory. Do not choose iteration count by repeatedly inspecting test scores.
-For confirmatory evaluation after pilot-driven choices, use new sessions or a
-separately reserved test set. The selected first three sorted sessions are an
-engineering sample, not a representative brain-wide sample.
+These session choices are an engineering sample, not a representative brain-wide
+sample. The full grid is **432 encoder fits** before exclusions. Inspect total and
+regularization loss, gradients, validation decoding, nulls, stability, seconds and
+VRAM before increasing toward 10,000 iterations. Freeze choices before evaluating
+reserved sessions. Do not tune by repeatedly inspecting test scores.
 
-## Scientific controls and outputs
+For multiple workers and Slurm, use the [portable job instructions](../cluster/README.md).
+Each worker owns one session's full candidate grid. Merge verifies every planned
+worker and preserves its provenance; explicit preprocessing exclusions remain
+visible. Run clustering once over the merged study so its correction family
+covers all session-area-method tests. Use at least 999 Gaussian draws for improved
+resolution in a larger analysis, and inspect the resulting minimum attainable p-value.
 
-- A fixed 60/20/20 split of retained trials is shared by all seeds and dimensions.
-  Neuron inclusion, movement lag fitting, and normalization use training trials
-  only. Smoothing stays within trials. Raw trial/neuron indices and fitted
-  preprocessing parameters are archived.
-- Neural-context Ridge/logistic decoding baselines receive the same
-  neurons and receptive-field windows as the encoders. Embeddings receive both
-  linear and kNN decoders. Raw-neural kNN is omitted to avoid a costly quadratic
-  distance computation in thousands of input dimensions. Decoding evaluation uses
-  interior bins. Scaling and decoder fits use training data; decoder parameters
-  and embedding dimension use validation scores only. Test scores are reported
-  for the selected dimension, separately for linear and kNN decoders.
-- Time-resolved behaviour-to-neuron Ridge and reduced-rank Ridge encoding are
-  reported separately in `encoding.json`. These are local baselines, not a
-  reproduction of the published global RRR fit. Coefficients (time × variable ×
-  neuron) and test predictions are saved as NPZ files.
-- Each null jointly permutes complete training-trial label trajectories, then
-  retrains the encoder and decoder. Test/validation labels retain their original
-  assignment. This preserves within-trial trajectories and dependencies between
-  variables. Trial exchangeability is imperfect for task blocks and drift;
-  these are diagnostics, not calibrated permutation p-values. One null is a
-  pilot minimum; increase `--nulls` before estimating a null distribution.
-- `scores.json` reports R² or balanced accuracy and 95% trial-bootstrap intervals.
-  Degenerate targets yield an unavailable score rather than fabricated evidence.
-  Intervals are conditional on the fitted model and selected dimension.
-- `stability.json` reports validation-fitted linear alignment evaluated on test
-  embeddings, and neuron-attribution Spearman agreement across seed pairs at
-  each dimension. Stability does not identify exact biological dimensionality.
-- `summary.json` averages seeds within each session, then bootstraps sessions.
-  Three sessions give weak population uncertainty; sessions from one animal are
-  not independent animals. No across-mouse claim is supported by these files.
-- Each combination saves all embeddings, loss histories, final models,
-  checkpoints, held-out attributions and test predictions. Data hashes, code
-  hashes, package versions and device information are in `manifest.json`.
-  Non-finite output fails instead of silently becoming a successful result.
+Kaggle defaults to one-session calibration with explicit CUDA and pinned training
+requirements. `KAGGLE_PIPELINE_ARGS` replaces the default arguments; include the
+cohort/session selection and `--device cuda` in an override. The launcher clones
+GitHub, so local changes must be committed/pushed before a new remote run can use
+them. `KAGGLE_EXPERIMENT_MODE=legacy` selects the historical path and requires its
+own legacy CLI arguments; it does not consume the controlled pilot protocol.
 
-## Remaining interpretation work
+## Artifacts, recovery and verification
 
-The second thesis question needs neuron-level within-area clustering,
-reproducibility filtering, Gaussian nulls, and multiple-testing correction.
-The pilot saves neuron IDs, area metadata and per-seed attributions for that
-analysis, but does not automatically declare clusters or cortical specialization.
-Area comparisons also require appropriate session weighting and neuron-count
-controls. Training a known-ground-truth synthetic generative model is still
-needed before making xCEBRA recovery/identifiability claims.
+Each completed variable has an integrity-checked recovery model and diagnostics.
+A matching rerun reuses completed variables and combinations. An interrupted
+variable restarts from its seed; optimizer-step continuation is not implemented.
+Checkpoints are saved every 100 iterations with one retained per variable.
+Configuration, code, input or environment changes require a new output directory.
+Corruption fails explicitly instead of being accepted as a completed result.
 
-The local raw dataset contains 205 NPZ sessions. The original RRR JSON paths
-contain placeholders, so direct paper-result comparisons remain unavailable.
-A real GPU run, runtime budget, and the actual RRR export remain external needs.
+Outputs include fitted preprocessing, raw neuron IDs/UUIDs, models, decoders and
+scalers, encoding coefficients/intercepts/predictions, embeddings, full training
+diagnostics, held-out attributions, paired scores/intervals, seed stability,
+runtime/memory profiles, numerical-warning counts and hashed completion manifests.
+`warnings.json` retains emitted warning details/counts without changing filters.
+Non-finite training/output fails. Final merged output retains each worker manifest.
 
-## Verification
+The offline analysis writes neuron/session-area tables, reproducible KMeans
+selection, covariance-matched Gaussian nulls, BH correction and cross-seed cluster
+agreement. These are explicitly defined extensions to the reference protocol;
+Gaussian rejection does not establish biological categories. The actual published
+RRR export remains unavailable, and NumPy/macOS matrix-operation warnings remain
+unresolved despite finite CPU outputs. Linux/CUDA validation is still required.
 
-`python -m unittest discover -s tests -v` checks training/test isolation, joint
-trial shuffling, and attribution invariance to batch partition. A short CPU
-smoke run exercises continuous and categorical models, two seeds, two dimensions,
-observed/null training, checkpoint saving, selection, stability and result export.
-This checks execution, not convergence or biological validity. The local NumPy
-2.2/macOS numerical stack emits matrix-multiplication runtime warnings despite
-finite saved results; inspect the GPU environment independently before scaling.
+Runnable local checks:
+
+```sh
+python -m unittest discover -s tests -v
+python -m scripts.verify_pipeline --output outputs/new_cpu_verification
+python -m scripts.validate_synthetic_recovery --help
+```
+
+The verification script uses tiny fixtures, three iterations per fit and an empty
+output directory. It is an execution check, not a convergence benchmark.

@@ -78,18 +78,14 @@ def _find_best_delay_by_cc(beh_signal, neural_data, max_delay=None):
     beh_centered = beh_signal - np.mean(beh_signal, axis=1, keepdims=True)
     neural_centered = neural_data - np.mean(neural_data, axis=1, keepdims=True)
     lags = signal.correlation_lags(beh_signal.shape[1], T, mode="valid")
-    cc_by_neuron = np.asarray([
-        np.mean(
-            [
-                signal.correlate(
-                    beh_centered[k], neural_centered[k, :, ni], mode="valid"
-                )
-                for k in range(K)
-            ],
-            axis=0,
-        )
-        for ni in range(N)
-    ])
+    # The valid correlation is a dot product for each nonnegative lag.
+    # Contract trials/time directly, avoiding K*N Python/scipy calls and a
+    # broadcasted K*time*neurons*lags temporary.
+    cc_by_neuron = np.stack([
+        np.einsum("kt,ktn->n", beh_centered[:, lag:lag+T], neural_centered,
+                  optimize=False) / K
+        for lag in lags
+    ], axis=1)
     cc_norm = np.linalg.norm(cc_by_neuron, axis=0)
 
     if max_delay is not None:

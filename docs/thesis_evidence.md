@@ -5,17 +5,22 @@
 
 The pasted brief is treated as an unverified project proposal from another language model. It is not evidence that an experiment was run, nor does it override the papers or the repository. Claims in the final thesis must be promoted from “planned” to “result” only after the corresponding experiment, configuration, and output are saved.
 
-## Current code update (5 September 2026)
+## Current code update (9 September 2026)
 
-The historical audit below describes the earlier implementation. The new
-[GPU pilot protocol](gpu_pilot.md) supersedes its implementation-status claims:
-training-only preprocessing, matched decoding and local encoding baselines,
-retrained trial-shuffle controls, seed/dimension sweeps, trial/session intervals,
-and seed stability are implemented in `xcebra_ibl.experiments`. The current
-method remains a regularized per-variable CEBRA adaptation. CPU smoke tests are
-engineering evidence; no new scientific GPU results are claimed. Canonical
-multiobjective xCEBRA, calibrated clustering inference and the original RRR
-export remain outstanding.
+The historical audit below describes the earlier implementation. The updated
+[GPU pilot protocol](gpu_pilot.md) and [analysis protocol](analysis_protocol.md)
+supersede its implementation-status claims. The controlled runner now includes
+trial-safe sampling, matched decoding/local encoding baselines, retrained nulls,
+seed/dimension sweeps, paired uncertainty, saved diagnostics, recovery and portable
+workers. Offline neuron clustering includes reproducibility, Gaussian nulls and
+multiple-testing correction. See the [verification record](pre_gpu_verification_2026-09-09.md).
+
+The method remains a regularized per-variable CEBRA adaptation. CPU execution
+checks are not scientific GPU results. The learned synthetic diagnostic showed
+inconsistent attribution recovery despite useful decoding. Biological attribution
+and clustering claims therefore remain unvalidated. Canonical multiobjective
+xCEBRA is a separate method decision; the original RRR export and GPU calibration
+remain external dependencies.
 
 ## Continuity and advisor alignment
 

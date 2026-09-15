@@ -28,35 +28,12 @@ from xcebra_ibl.configs.config import (
 )
 
 
-def _install_trial_safe_expander(dataset, trial_ids, trial_length):
-    """Make a CEBRA dataset clamp offset windows inside their trial."""
-    import types
+from xcebra_ibl.models.trials import (
+    install_trial_safe_expander as _install_trial_safe_expander,
+    install_trial_safe_differences, validate_trials,
+)
+from xcebra_ibl.experiment.artifacts import write_json, complete, verified
 
-    trial_ids = np.asarray(trial_ids, dtype=np.int64)
-    starts = {}
-    ends = {}
-    for position, trial in enumerate(trial_ids):
-        trial = int(trial)
-        starts.setdefault(trial, position)
-        ends[trial] = position + 1
-    offset = dataset.offset
-
-    def expand_index(self, index):
-        index_tensor = torch.as_tensor(index, dtype=torch.long)
-        centers = index_tensor.detach().cpu().numpy().reshape(-1)
-        expanded = []
-        for center in centers:
-            center = int(center)
-            trial = int(trial_ids[center])
-            lower = starts[trial] + int(offset.left)
-            upper = ends[trial] - int(offset.right)
-            clipped = min(max(center, lower), upper)
-            expanded.append(
-                [clipped + delta for delta in range(-int(offset.left), int(offset.right))]
-            )
-        return torch.as_tensor(expanded, dtype=torch.long, device=index_tensor.device)
-
-    dataset.expand_index = types.MethodType(expand_index, dataset)
 
 
 class XCEBRAModel:
@@ -84,7 +61,8 @@ class XCEBRAModel:
     num_hidden_units : int
         Hidden layer size in the encoder.
     device : str
-        'cuda' or 'cpu'.
+        'cuda_if_available' selects CUDA, then MPS, then CPU. An explicit
+        'cuda', 'cuda:N', 'mps' or 'cpu' requests that device.
     """
 
     def __init__(
@@ -106,6 +84,7 @@ class XCEBRAModel:
         jacobian_pinv_rcond: float = JACOBIAN_PINV_RCOND,
         random_seed: int = RANDOM_SEED,
         use_xcebra: bool = True,
+        recovery_dir: Optional[str] = None,
     ):
         self.embedding_dim_per_group = embedding_dim_per_group
         self.n_groups = N_VARIABLES
@@ -126,6 +105,8 @@ class XCEBRAModel:
         self.jacobian_pinv_rcond = jacobian_pinv_rcond
         self.random_seed = random_seed
         self.use_xcebra = use_xcebra
+        self.recovery_dir = Path(recovery_dir) if recovery_dir else None
+        self.training_diagnostics_ = {}
 
         # Training and inference must use the same trial boundaries.  Without
         # this, an offset convolution sees the last bins of one trial next to
@@ -150,16 +131,13 @@ class XCEBRAModel:
         time_ids = np.asarray(time_ids)
         if trial_ids.ndim != 1 or time_ids.ndim != 1 or len(trial_ids) != len(time_ids):
             raise ValueError("trial_ids and time_ids must be matching 1D arrays")
+        validate_trials(trial_ids, int(trial_length), time_ids)
         self.trial_ids_ = trial_ids.astype(np.int64, copy=False)
         self.time_ids_ = time_ids.astype(np.int64, copy=False)
         self.trial_length_ = int(trial_length)
 
     def _fit_cebra(self, model, neural_data, y, callback, fit_kwargs):
         """Fit ordinary CEBRA or the official CEBRA 0.6 regularized solver."""
-        if not self.use_xcebra or self.jacobian_reg_weight is None:
-            model.fit(neural_data, y, **fit_kwargs)
-            return
-
         # The regularized solver is part of the official xCEBRA API in CEBRA
         # 0.6.  Build the estimator's dataset/loader once, then replace only
         # its solver with RegularizedSolver so save/transform remain standard
@@ -172,6 +150,7 @@ class XCEBRAModel:
                 raise ValueError("Regularized xCEBRA requires single-session input")
             if self.trial_ids_ is not None:
                 _install_trial_safe_expander(loader.dataset, self.trial_ids_, self.trial_length_)
+                install_trial_safe_differences(loader, self.trial_ids_)
             solver = cebra.solver.init(
                 "regularized-solver",
                 model=encoder,
@@ -180,15 +159,40 @@ class XCEBRAModel:
                 tqdm_on=model.verbose,
                 lambda_JR=self.jacobian_reg_weight,
             )
+            if not self.use_xcebra or self.jacobian_reg_weight is None:
+                solver = base_solver
             solver.to(model.device_)
+
+            def inspect_gradients(optimizer, args, kwargs):
+                norms = []
+                for group in optimizer.param_groups:
+                    for parameter in group["params"]:
+                        if parameter.grad is not None:
+                            if not torch.isfinite(parameter.grad).all():
+                                raise FloatingPointError("Non-finite training gradient")
+                            norms.append(parameter.grad.detach().norm().square())
+                value = float(torch.stack(norms).sum().sqrt().item()) if norms else 0.0
+                solver.log.setdefault("gradient_norm", []).append(value)
+
+            hook = solver.optimizer.register_step_pre_hook(inspect_gradients)
+
+            def inspect_step(step, fitted_solver):
+                if not torch.stack([torch.isfinite(p).all() for p in fitted_solver.model.parameters()]).all():
+                    raise FloatingPointError("Non-finite trained parameter")
+                for values in fitted_solver.log.values():
+                    if values and not np.isfinite(float(values[-1])):
+                        raise FloatingPointError("Non-finite optimization diagnostic")
+                if callback is not None:
+                    callback(step, fitted_solver)
             model._partial_fit(
                 solver,
                 encoder,
                 loader,
                 is_multisession,
-                callback=callback,
-                callback_frequency=(self.checkpoint_frequency if callback else None),
+                callback=inspect_step,
+                callback_frequency=1,
             )
+            hook.remove()
         except (AttributeError, KeyError, ImportError) as exc:
             raise RuntimeError(
                 "Official regularized xCEBRA requires cebra==0.6.0 or newer; "
@@ -208,6 +212,8 @@ class XCEBRAModel:
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
         def save_checkpoint(num_steps, solver):
+            if (num_steps + 1) % self.checkpoint_frequency:
+                return
             filename = f"{prefix}_step_{num_steps:08d}.pt"
             solver.save(str(checkpoint_dir), filename)
             if self.checkpoint_retention is not None:
@@ -251,6 +257,7 @@ class XCEBRAModel:
             torch.cuda.manual_seed_all(self.random_seed)
         self.models_ = {}
         self.training_losses_ = {}
+        self.training_diagnostics_ = {}
         self._set_trial_structure(trial_ids, time_ids, trial_length)
 
         for var_idx, var_name in enumerate(VARIABLE_NAMES):
@@ -262,6 +269,13 @@ class XCEBRAModel:
             if verbose:
                 print(f"\n  Training CEBRA for variable {var_idx + 1}/{N_VARIABLES}: {var_name}")
 
+            # Variable-specific RNG makes interrupted and uninterrupted fits agree.
+            variable_seed = self.random_seed + var_idx * 1009
+            random.seed(variable_seed)
+            np.random.seed(variable_seed)
+            torch.manual_seed(variable_seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(variable_seed)
             y = labels[var_name]
             if y.ndim == 2:
                 y = y.ravel()
@@ -307,12 +321,40 @@ class XCEBRAModel:
                 # Continuous labels must be two-dimensional arrays.
                 y = y.astype(np.float32, copy=False).reshape(-1, 1)
 
-            self._fit_cebra(model, neural_data, y, callback, fit_kwargs)
-
+            recovery = self.recovery_dir / var_name if self.recovery_dir else None
+            import hashlib, json
+            signature = hashlib.sha256()
+            parameters = dict(dimension=self.embedding_dim_per_group, architecture=self.model_architecture,
+                iterations=self.max_iterations, batch=self.batch_size, lr=self.learning_rate,
+                temperature=self.temperature, hidden=self.num_hidden_units, time_offset=self.time_offsets,
+                regularization=self.jacobian_reg_weight, regularized=self.use_xcebra, seed=variable_seed)
+            signature.update(json.dumps(parameters,sort_keys=True).encode())
+            for array in (neural_data, y, self.trial_ids_, self.time_ids_):
+                if array is not None:
+                    array = np.ascontiguousarray(array)
+                    signature.update(str((array.shape,array.dtype)).encode())
+                    signature.update(memoryview(array).cast('B'))
+            signature = signature.hexdigest()
+            recovered = verified(recovery) if recovery is not None else None
+            if recovered and recovered.get('fit_signature') != signature:
+                raise ValueError("Recovery model has different training data or parameters")
+            if recovered:
+                import json
+                model = CEBRA.load(str(recovery / "model.pt"), weights_only=False)
+                diagnostics = json.loads((recovery / "diagnostics.json").read_text())
+            else:
+                self._fit_cebra(model, neural_data, y, callback, fit_kwargs)
+                diagnostics = {key: [float(value) for value in values]
+                               for key, values in model.solver_.log.items()}
+                if recovery is not None:
+                    recovery.mkdir(parents=True, exist_ok=True)
+                    model.save(str(recovery / "model.tmp.pt"))
+                    (recovery / "model.tmp.pt").replace(recovery / "model.pt")
+                    write_json(recovery / "diagnostics.json", diagnostics)
+                    complete(recovery, {"variable": var_name, "seed": variable_seed, "fit_signature": signature})
             self.models_[var_name] = model
-            self.training_losses_[var_name] = (
-                model.state_dict_["loss"] if hasattr(model, "state_dict_") else []
-            )
+            self.training_diagnostics_[var_name] = diagnostics
+            self.training_losses_[var_name] = diagnostics.get("loss", [])
 
         self.is_fitted_ = True
         if verbose:
@@ -809,6 +851,11 @@ class XCEBRAModel:
             "jacobian_n_proj": self.jacobian_n_proj,
             "jacobian_pinv_rcond": self.jacobian_pinv_rcond,
             "random_seed": self.random_seed,
+            "batch_size": self.batch_size,
+            "learning_rate": self.learning_rate,
+            "temperature": self.temperature,
+            "num_hidden_units": self.num_hidden_units,
+            "time_offsets": self.time_offsets,
             "label_classes": self.label_classes_,
             "trial_safe_temporal_context": self.trial_ids_ is not None,
         }
@@ -822,6 +869,18 @@ class XCEBRAModel:
             save_dir = MODELS_DIR
         save_dir = Path(save_dir)
 
+        import json
+        metadata_path = save_dir / f"{prefix}_meta.json"
+        if metadata_path.exists():
+            metadata = json.loads(metadata_path.read_text())
+            for key in ("embedding_dim_per_group", "model_architecture", "max_iterations",
+                        "jacobian_reg_weight", "jacobian_n_proj", "jacobian_pinv_rcond",
+                        "random_seed", "batch_size", "learning_rate", "temperature",
+                        "num_hidden_units", "time_offsets", "use_xcebra"):
+                if key in metadata:
+                    setattr(self, key, metadata[key])
+            self.label_classes_ = metadata.get("label_classes", {})
+        self.models_ = {}
         # Load per-variable models
         for var_name in VARIABLE_NAMES:
             path = save_dir / f"{prefix}_{var_name}.pt"

@@ -1,0 +1,229 @@
+# Loki GPU runbook
+
+Prepared 15 September 2026. This is an operator checklist for the approved Loki
+pilot workflow. Commands marked **Mac** run on the local Mac. Commands marked
+**Loki** run only after the prompt is `mohammadi@loki`.
+
+## Current status
+
+Verified:
+
+- `ssh mohammadi@100.75.110.13` works noninteractively.
+- `/media/hdd` is read-write ext4 with about 3.2 TB free. The private directory
+  `/media/hdd/mohammadi/thesis` exists, and a temporary write/read/remove test
+  passed there.
+- The selected training interpreter is `/opt/miniconda/bin/python` at Python
+  3.13.2. The system Python 3.12.3 is not the training interpreter.
+- User Torch is 2.10.0+cu126 at
+  `/home/mohammadi/.local/lib/python3.13/site-packages`. CUDA is available, and
+  the build contains sm50, sm60, sm70, sm75, sm80, sm86 and sm90 support.
+- Loki has 40 logical CPUs, 110 GiB RAM (about 85 GiB available), and `tmux`.
+  No `sbatch` or `srun` was found.
+- The two intended P6000s are
+  `GPU-ddcddfcb-9e9a-2fec-a848-077ca2c870b5` and
+  `GPU-13cc3970-fd10-b6f2-630b-75459933e640`. Exclude the K620.
+
+Working assumption authorized by the user: both P6000s are available with no
+time or CPU limit. This has not been confirmed by the supervisor or a scheduler.
+
+The 25 local tests pass, including CUDA/MPS/CPU device preference. These tests have
+not run on Loki. Still pending: the other pinned scientific dependencies,
+`pip check`, the full Loki test suite, a real CUDA operation on each P6000,
+persistence/recovery checks, representative runtime and output-size measurements,
+and scientific pilot acceptance. Do not describe a proposed command below as
+completed evidence.
+
+The root filesystem has only about 19 GB free and is 96% used. Keep the checkout,
+environment, data, temporary files, caches and outputs under `/media/hdd`.
+
+## 1. Connect and set the workspace
+
+**Mac**
+
+```sh
+ssh -o ConnectTimeout=10 mohammadi@100.75.110.13
+```
+
+**Loki**
+
+```sh
+cd /media/hdd/mohammadi/thesis
+mkdir -p cache/pip cache/torch cache/xdg tmp outputs data
+source /media/hdd/mohammadi/thesis/activate.sh
+df -h / /media/hdd
+```
+
+The activation script selects `/media/hdd/mohammadi/thesis/.venv313`, redirects
+pip, Torch, XDG and temporary caches to the HDD, and limits CPU threads to four per
+worker. Source it in every new shell. Do not redirect shared system caches or
+change shared permissions.
+
+## 2. Publish and retrieve one exact source version
+
+The local readiness changes must be reviewed, tested, committed and pushed before
+Loki clones them. Record the resulting full commit SHA as `RELEASE_SHA`.
+
+**Mac, from `/Users/helialiaia/ACSAI/NeuroAI/thesis`**
+
+```sh
+git status --short --branch
+python -m unittest discover -s tests -v
+git rev-parse HEAD
+```
+
+Review the intended diff, create the release commit, push it, then record its SHA:
+
+```sh
+git rev-parse HEAD
+```
+
+**Loki**
+
+```sh
+cd /media/hdd/mohammadi/thesis
+source /media/hdd/mohammadi/thesis/activate.sh
+git clone https://github.com/Helialiaia01/NEUROAI.git
+cd NEUROAI
+git fetch --all --tags
+git checkout --detach RELEASE_SHA
+git rev-parse HEAD
+```
+
+Replace `RELEASE_SHA` with the recorded full SHA and require the two machines to
+match. If the clone fails, transfer a Git bundle or copy over SSH, preserving that
+exact commit; verify `git rev-parse HEAD` again before continuing. Inspect and
+preserve any existing checkout instead of overwriting it.
+
+## 3. Transfer and verify data separately
+
+Git does not include the approximately 72 GB in `data/downloaded`. First check for
+an authorized existing copy on Loki. If none exists, transfer calibration sessions
+first, then the required cohort with a resumable tool.
+
+**Mac, example full transfer**
+
+```sh
+rsync -a --info=progress2 --partial data/downloaded/ mohammadi@100.75.110.13:/media/hdd/mohammadi/thesis/data/downloaded/
+```
+
+Before training, compare session IDs and file counts and verify SHA-256 hashes for
+the selected files on both machines. Avoid a second raw-data copy.
+
+## 4. Complete and gate the training environment and both GPUs
+
+The HDD environment `.venv313` uses `--system-site-packages` so it can reuse the
+verified user Torch described above. It is therefore not isolated from that user
+Torch dependency: record Torch's exact path and version with every environment
+snapshot. Other pinned scientific dependencies are not yet installed. Complete
+their installation in this venv; do not replace the working Torch unless a
+compatibility check requires a reviewed change.
+
+**Loki — proposed dependency installation**
+
+```sh
+source /media/hdd/mohammadi/thesis/activate.sh
+cd /media/hdd/mohammadi/thesis/NEUROAI
+python -m pip install -r environments/requirements-training.txt
+python -m pip install -e .
+```
+
+**Loki**
+
+```sh
+source /media/hdd/mohammadi/thesis/activate.sh
+cd /media/hdd/mohammadi/thesis/NEUROAI
+which python
+python --version
+python -m pip --version
+python -m pip check
+python -m pip freeze
+nvidia-smi -L
+python -c 'import torch, cebra; print("torch", torch.__version__, "torch path", torch.__file__, "cuda build", torch.version.cuda, "cuda available", torch.cuda.is_available(), "architectures", torch.cuda.get_arch_list(), "cebra", cebra.__version__)'
+```
+
+Then run a small real tensor operation once with each P6000 visible:
+
+```sh
+CUDA_VISIBLE_DEVICES=GPU-ddcddfcb-9e9a-2fec-a848-077ca2c870b5 python -c 'import torch; x=torch.ones(1024,device="cuda"); print(torch.cuda.get_device_name(), float((x*x).sum()))'
+CUDA_VISIBLE_DEVICES=GPU-13cc3970-fd10-b6f2-630b-75459933e640 python -c 'import torch; x=torch.ones(1024,device="cuda"); print(torch.cuda.get_device_name(), float((x*x).sum()))'
+```
+
+Stop if either command does not use a P6000, CUDA fails, `pip check` fails, Torch
+does not resolve to the recorded user installation, or the installed package
+combination conflicts with the pinned recipe. Resolve other dependencies inside
+`.venv313` under `/media/hdd/mohammadi/thesis`; never install the macOS freeze
+wholesale on Linux and do not alter drivers or reboot.
+
+## 5. Validate before any long run
+
+**Loki, from the exact release checkout and selected environment**
+
+```sh
+source /media/hdd/mohammadi/thesis/activate.sh
+cd /media/hdd/mohammadi/thesis/NEUROAI
+python -m unittest discover -s tests -v
+python -m scripts.verify_pipeline --output /media/hdd/mohammadi/thesis/outputs/new_cpu_verification
+python -m xcebra_ibl.experiments --cohort xcebra_ibl/configs/cohort.json --session-ids 044be2f4-e898-404c-91e2-1285cbada2cd --preflight-only --device cuda --output /media/hdd/mohammadi/thesis/outputs/preflight
+```
+
+Preflight records configuration and CUDA availability but does not execute a GPU
+kernel. The tensor checks above and the calibration below provide actual GPU
+evidence. CEBRA 0.6 otherwise resolves CUDA, then MPS, then CPU when asked for an
+available device, so retain explicit `--device cuda` on Loki jobs to prevent a
+silent CPU fallback. Use a new empty output directory whenever code, input,
+configuration or environment changes.
+
+## 6. Calibrate on one P6000
+
+**Loki — proposed run; execute only after Sections 1–5 pass**
+
+```sh
+source /media/hdd/mohammadi/thesis/activate.sh
+cd /media/hdd/mohammadi/thesis/NEUROAI
+CUDA_VISIBLE_DEVICES=GPU-ddcddfcb-9e9a-2fec-a848-077ca2c870b5 python -m xcebra_ibl.experiments --cohort xcebra_ibl/configs/cohort.json --session-ids 044be2f4-e898-404c-91e2-1285cbada2cd --seeds 2025 --dimensions 4 --iterations 500 --device cuda --output /media/hdd/mohammadi/thesis/outputs/gpu_calibration
+```
+
+Confirm finite outputs, regularization and attribution execution, warnings,
+recovery behavior, elapsed time, peak VRAM, CPU RAM and output size. Repeat a
+representative timing at 1,000 iterations before estimating the full budget.
+
+## 7. Run the controlled pilot with two independent workers
+
+Use one independent full-session-grid worker per P6000. Do not split one model
+across GPUs and do not introduce DDP. Each worker must have one GPU UUID, disjoint
+session IDs, a shared immutable manifest and a separate output directory. Use
+`tmux` for persistence because no Slurm commands were found. Limit CPU threads if
+the two workers contend during CPU baselines.
+
+The approved three-session pilot is three seeds, dimensions 2/4/8 and 500
+iterations: 432 encoder fits before exclusions. Assign whole sessions between the
+two workers through the repository's portable job mechanism; do not manually
+divide a session's grid. First benchmark one worker, then two concurrent workers,
+and record measured throughput rather than assuming a 2x speedup.
+
+After all planned workers pass their completion and integrity checks, merge their
+outputs once and run:
+
+```sh
+source /media/hdd/mohammadi/thesis/activate.sh
+cd /media/hdd/mohammadi/thesis/NEUROAI
+python -m xcebra_ibl.analysis.pilot --input MERGED_PILOT_OUTPUT --output /media/hdd/mohammadi/thesis/outputs/gpu_pilot_analysis --null-draws 99
+```
+
+Replace `MERGED_PILOT_OUTPUT` with the verified merged directory. Inspect losses,
+gradients, validation decoding, retrained nulls, attribution stability, synthetic
+support recovery, warnings, runtime and storage. Do not tune using reserved-session
+test results. Freeze the dimension and settings only after pilot review; keep three
+seeds, matched baselines and retrained null controls unless a scientific change is
+explicitly reviewed.
+
+## 8. Recovery and launch gate
+
+Test interruption and recovery on disposable calibration output before scaling.
+Completed variables may be reused; an interrupted variable restarts from its seed,
+not from an optimizer step. Merge only validated worker results and retain worker
+manifests and preprocessing exclusions.
+
+Do not start the main cohort until both P6000s have passed real CUDA checks, the
+pilot is scientifically accepted, dual-worker runtime and storage are measured,
+and the schedule still preserves rerun and writing time before 8 October 2026.

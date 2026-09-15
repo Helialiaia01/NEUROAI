@@ -1,0 +1,4 @@
+{
+  "description": "Controlled offline cortical pilot; session selection comes from the frozen cohort.",
+  "arguments": ["--seeds", "2025", "2026", "2027", "--dimensions", "2", "4", "8", "--iterations", "500", "--areas", "cortical", "--device", "cuda", "--bootstrap", "500", "--nulls", "1", "--regularization", "0.01"]
+}

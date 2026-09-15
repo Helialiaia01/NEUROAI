@@ -1,0 +1,1042 @@
+{
+  "version": 1,
+  "seed": 20260909,
+  "policy": "Deterministic allocation before new scientific training; 41 sessions reserved excluding historical model-directory sessions. Subject IDs unknown; no across-mouse claims.",
+  "sessions": [
+    {
+      "eid": "1a507308-c63a-4e02-8f32-3239a07dc578",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "288bfbf3-3700-4abe-b6e4-130b5c541e61",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "6c6b0d06-6039-4525-a74b-58cfaa1d3a60",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "c8d46ee6-eb68-4535-8756-7c9aa32f10e4",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "c3d9b6fb-7fa9-4413-a364-92a54df0fc5d",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "72028382-a869-4745-bacf-cb8789e16953",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "51e53aff-1d5d-4182-a684-aba783d50ae5",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "948fd27b-507b-41b3-bdf8-f9f5f0af8e0b",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "2584ce3c-db10-4076-89cb-5d313138dd38",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "303b4a2c-46b0-4042-91e7-6ec609dea0b3",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "30c4e2ab-dffc-499d-aae4-e51d6b3218c2",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "a23eb5b9-6b0c-469a-920c-26d422931e55",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "ffef0311-8ffa-49e3-a857-b3adf6d86e12",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "81a78eac-9d36-4f90-a73a-7eb3ad7f770b",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "77e6dc6a-66ed-433c-b1a2-778c914f523c",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "aad23144-0e52-4eac-80c5-c4ee2decb198",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "d32876dd-8303-4720-8e7e-20678dc2fd71",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "b887df2c-bb9c-44c9-a9c0-538da87b2cab",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "7cb81727-2097-4b52-b480-c89867b5b34c",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "25f77e81-c1af-46ab-8686-73ac3d67c4a7",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "0cf6d255-8f2f-463e-84fb-c54bacb79f51",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "821f1883-27f3-411d-afd3-fb8241bbc39a",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "35ed605c-1a1a-47b1-86ff-2b56144f55af",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "d04feec7-d0b7-4f35-af89-0232dd975bf0",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "64977c74-9c04-437a-9ea1-50386c4996db",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "d0d46f77-1066-4568-a984-b2469f948aa2",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "247954c5-ded8-4356-ba96-c808f6faa21c",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "2c44a360-5a56-4971-8009-f469fb59de98",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "e48e0f9b-1b5a-4c30-a6a0-bf026a2bfbde",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "f5591ac5-311d-4fa8-9bad-029d7be9c491",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "15763234-d21e-491f-a01b-1238eb96d389",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "1dbba733-24a4-4400-9436-53f1bd8428e8",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "b22f694e-4a34-4142-ab9d-2556c3487086",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "1d4a7bd6-296a-48b9-b20e-bd0ac80750a5",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "28338153-4113-485b-835b-91cb96d984f2",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "44bcaf66-178f-45ac-8754-02e89d884c67",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "6f09ba7e-e3ce-44b0-932b-c003fb44fb89",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "0ac8d013-b91e-4732-bc7b-a1164ff3e445",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "c7bd79c9-c47e-4ea5-aea3-74dda991b48e",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "78b4fff5-c5ec-44d9-b5f9-d59493063f00",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "952870e5-f2a7-4518-9e6d-71585460f6fe",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "29a6def1-fc5c-4eea-ac48-47e9b053dcb5",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "ebce500b-c530-47de-8cb1-963c552703ea",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "83f4b301-f689-45b1-90c0-8a598c66f4a2",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "9fc31d79-b56f-46d0-92a0-e9563caf4a7a",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "91cc517d-628d-402f-a8a4-6bd239b97b36",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "69a0e953-a643-4f0e-bb26-dc65af3ea7d7",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "3f859b5c-e73a-4044-b49e-34bb81e96715",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "08102cfc-a040-4bcf-b63c-faa0f4914a6f",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "f140a2ec-fd49-4814-994a-fe3476f14e66",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "f7335a49-4a98-46d2-a8ce-d041d2eac1d6",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "a9bec34e-0ab7-400a-94e3-eee79e8133a7",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "7af49c00-63dd-4fed-b2e0-1b3bd945b20b",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "fa1f26a1-eb49-4b24-917e-19f02a18ac61",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "caa5dddc-9290-4e27-9f5e-575ba3598614",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "69c9a415-f7fa-4208-887b-1417c1479b48",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "431012c1-caa6-46aa-a417-44b4bc29121f",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "85dc2ebd-8aaf-46b0-9284-a197aee8b16f",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "d901aff5-2250-467a-b4a1-0cb9729df9e2",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "fee6dd62-01d9-42d2-bcc1-5a7e27244edc",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "626126d5-eecf-4e9b-900e-ec29a17ece07",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "88d24c31-52e4-49cc-9f32-6adbeb9eba87",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "3bcb81b4-d9ca-4fc9-a1cd-353a966239ca",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "360eac0c-7d2d-4cc1-9dcf-79fc7afc56e7",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "113c5b6c-940e-4b21-b462-789b4c2be0e5",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "b2664575-a766-4a70-aba5-d0809557f420",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "ebbbf535-39df-4cd0-8d58-9574614ae047",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "c875fc7d-0966-448a-813d-663088fbfae8",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "5adab0b7-dfd0-467d-b09d-43cb7ca5d59c",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "e56541a5-a6d5-4750-b1fe-f6b5257bfe7c",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "4ecb5d24-f5cc-402c-be28-9d0f7cb14b3a",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "e7d2decc-e212-484a-8dc4-a37634d76497",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "88224abb-5746-431f-9c17-17d7ef806e6a",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "37ba7dd8-714f-4c63-a7e3-548e35d8664a",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "d45f1a4a-7f14-4f84-a85c-34b21c6d498c",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "b196a2ad-511b-4e90-ac99-b5a29ad25c22",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "781b35fd-e1f0-4d14-b2bb-95b7263082bb",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "7f150b7c-c261-46e6-9edb-cc391c9d9f03",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "642c97ea-fe89-4ec9-8629-5e492ea4019d",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "f115196e-8dfe-4d2a-8af3-8206d93c1729",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "9eec761e-9762-4897-b308-a3a08c311e69",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "eed7b1c0-fcdb-4727-a63f-00e42083d1df",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "3270c445-4ae2-4079-9ba5-4e2f1eb94706",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "5569f363-0934-464e-9a5b-77c8e67791a1",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "a4e8e8f4-4836-4363-8b84-ababee97cf31",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "cde63527-7f5a-4cc3-8ac2-215d82e7da26",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "64e3fb86-928c-4079-865c-b364205b502e",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "c3ac69ad-851a-475c-8ba8-e44e9bd76dcb",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "9b528ad0-4599-4a55-9148-96cc1d93fb24",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "5ec72172-3901-4771-8777-6e9490ca51fc",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "09f836ad-8105-464a-a55d-70c49e6e6def",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "26aa51ff-968c-42e4-85c8-8ff47d19254d",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "6ab9d98c-b1e9-4574-b8fe-b9eec88097e0",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "2ed3ef53-aaec-445f-b043-64476d4015ca",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "752456f3-9f47-4fbf-bd44-9d131c0f41aa",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "e0928e11-2b86-4387-a203-80c77fab5d52",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "bd02e951-760a-448d-9c52-3f2990f9cf42",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "81a1dca0-cc90-47c5-afe3-c277319c47c8",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "671c7ea7-6726-4fbe-adeb-f89c2c8e489b",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "493170a6-fd94-4ee4-884f-cc018c17eeb9",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "0f77ca5d-73c2-45bd-aa4c-4c5ed275dbde",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "aa3432cd-62bd-40bc-bc1c-a12d53bcbdcf",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "e45481fa-be22-4365-972c-e7404ed8ab5a",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "f88d4dd4-ccd7-400e-9035-fa00be3bcfa8",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "8d61f21b-5d8b-420d-909c-08e75f39ed38",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "5d01d14e-aced-4465-8f8e-9a1c674f62ec",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "4a45c8ba-db6f-4f11-9403-56e06a33dfa4",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "6cbeead9-bb7a-40e1-8ccd-47ae60239654",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "3ce6bd7c-7fc7-47df-8257-31d2a5994b13",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "c2906035-f307-481e-9922-bb65803da633",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "7cc74598-9c1b-436b-84fa-0bf89f31adf6",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "e012d3e3-fdbc-4661-9ffa-5fa284e4e706",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "ea880263-3ab4-4521-9e75-c715f7a36d73",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "a405053a-eb13-4aa4-850c-5a337e5dc7fd",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "6b0b5d24-bcda-4053-a59c-beaa1fe03b8f",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "e8b4fda3-7fe4-4706-8ec2-91036cfee6bd",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "5244890d-9353-4cfe-a18e-23481883e3a4",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "0cc486c3-8c7b-494d-aa04-b70e2690bcba",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "49e0ab27-827a-4c91-bcaa-97eea27a1b8d",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "48d85702-d05a-4220-bb05-3199331c453b",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "62902992-8432-46fb-af12-6392012e58c7",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "71e03be6-b497-4991-a121-9416dcc1a6e7",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "2d9bfc10-59fb-424a-b699-7c42f86c7871",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "07dc4b76-5b93-4a03-82a0-b3d9cc73f412",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "75b6b132-d998-4fba-8482-961418ac957d",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "239dd3c9-35f3-4462-95ee-91b822a22e6b",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "c7bf2d49-4937-4597-b307-9f39cb1c7b16",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "044be2f4-e898-404c-91e2-1285cbada2cd",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "f10ad1e6-daeb-4941-8e9e-0b4e657a7f1e",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "f45e30cf-12aa-4fa0-8248-f9f885dfa9ef",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "695a6073-eae0-49e0-bb0f-e9e57a9275b9",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "fd03d365-91df-41e2-ad81-9e0e4b9f5c7b",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "d2832a38-27f6-452d-91d6-af72d794136c",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "a45e62df-9f7f-4429-95a4-c4e334c8209f",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "720c3f1e-2bb9-441c-9b7b-bcd6f4ed4a7d",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "3f6e25ae-c007-4dc3-aa77-450fd5705046",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "537677fe-1e24-4755-948c-fa4a4e8ecce5",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "4ef13091-1bc8-4f32-9619-107bdf48540c",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "79afa7ac-84ce-4bba-80a3-c83eb623d597",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "1b61b7f2-a599-4e40-abd6-3e758d2c9e25",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "ae8787b1-4229-4d56-b0c2-566b61a25b77",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "d25dcbfa-501a-4037-bb5d-0726c17f429d",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "e9fc0a2d-c69d-44d1-9fa3-314782387cae",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "eebacd5a-7dcd-4ba6-9dff-ec2a4d2f19e0",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "72cb5550-43b4-4ef0-add5-e4adfdfb5e02",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "3e6a97d3-3991-49e2-b346-6948cb4580fb",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "86b6ba67-c1db-4333-add0-f8105ea6e363",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "d0387aa6-b648-466a-b5a6-bb647c8acc41",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "fc43390d-457e-463a-9fd4-b94a0a8b48f5",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "0f056fb2-239f-491f-bfbb-52a5384a5e8f",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "1ca83b26-30fc-4350-a616-c38b7d00d240",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "ee212778-3903-4f5b-ac4b-a72f22debf03",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "d8921527-2f3a-4c5c-802a-bfa827fb4b2c",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "354c37f7-1025-46b2-8c95-4fe76bb6b60b",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "b69b86be-af7d-4ecf-8cbf-0cd356afa1bd",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "09156021-9a1d-4e1d-ae59-48cbde3c5d42",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "f819d499-8bf7-4da0-a431-15377a8319d5",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "f304211a-81b1-446f-a435-25e589fe3a5a",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "6434f2f5-6bce-42b8-8563-d93d493613a2",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "4aa1d525-5c7d-4c50-a147-ec53a9014812",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "5437ec1f-6535-470c-80b8-4c8806ee085d",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "56913301-81d1-477f-9c16-63a351215f09",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "ebe2efe3-e8a1-451a-8947-76ef42427cc9",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "64d2d8a4-42bf-441c-9758-aa87dbf39c0d",
+      "phase": "exploratory",
+      "subject": null
+    },
+    {
+      "eid": "c1fbabc4-21b1-47f9-92b0-57ed9da5ec4b",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "2ae486a1-aa10-41e4-b06f-ad7ffdfe7615",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "e730c7bc-c8c8-4402-9c9f-f560618ca7d1",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "3d59aa1a-b4ba-47fe-b9cf-741b5fdb0c7b",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "5c0c560e-9e1f-45e9-b66e-e4ee7855be84",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "cae5cd75-55e5-4277-8db3-cf4d6c5ff918",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "40a048d7-4612-40a4-80ab-41c9d1341d66",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "dfbe628d-365b-461c-a07f-8b9911ba83aa",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "e5c75b62-6871-4135-b3d0-f6464c2d90c0",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "eb396dfd-1dc9-41a7-8ad9-fdb2ecfb6c73",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "2d93903c-d02b-4e0d-9218-681f2884598d",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "c51f34d8-42f6-4c9c-bb5b-669fd9c42cd9",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "0cad7ea8-8e6c-4ad1-a5c5-53fbb2df1a63",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "5285c561-80da-4563-8694-739da92e5dd0",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "ae4a54de-43c9-4eff-8a7d-bd2d05c5f993",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "7c13fde2-66c5-4106-bab1-c014845c23c2",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "1b715600-0cbc-442c-bd00-5b0ac2865de1",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "8928f98a-b411-497e-aa4b-aa752434686d",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "72982282-e493-45ee-87ce-aa45cb3a3ec1",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "dfa58635-10b6-48d2-b77b-c4022ad0899a",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "63c70ae8-4dfb-418b-b21b-f0b1e5fba6c9",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "8c552ddc-813e-4035-81cc-3971b57efe65",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "8ca740c5-e7fe-430a-aa10-e74e9c3cbbe8",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "58b1e920-cfc8-467e-b28b-7654a55d0977",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "6fb1e12c-883b-46d1-a745-473cde3232c8",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "0802ced5-33a3-405e-8336-b65ebc5cb07c",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "eacc49a9-f3a1-49f1-b87f-0972f90ee837",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "45ef6691-7b80-4a43-bd1a-85fc00851ae8",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "5157810e-0fff-4bcf-b19d-32d4e39c7dfc",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "10891de7-5737-4796-864a-9332036a60ac",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "a4a74102-2af5-45dc-9e41-ef7f5aed88be",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "9a6e127b-bb07-4be2-92e2-53dd858c2762",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "68775ca0-b056-48d5-b6ae-a4c2a76ae48f",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "7416f387-b302-4ca3-8daf-03b585a1b7ec",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "8c33abef-3d3e-4d42-9f27-445e9def08f9",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "4386e497-eeac-4020-b8e8-73a05c10c472",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "edd22318-216c-44ff-bc24-49ce8be78374",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "91a3353a-2da1-420d-8c7c-fad2fedfdd18",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "f56194bc-8215-4ae8-bc6a-89781ad8e050",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "f4eb56a4-8bf8-4bbc-a8f3-6e6535134bad",
+      "phase": "confirmatory",
+      "subject": null
+    },
+    {
+      "eid": "6f6d2c8e-28be-49f4-ae4d-06be2d3148c1",
+      "phase": "confirmatory",
+      "subject": null
+    }
+  ],
+  "excluded_historical_session_ids": [
+    "2584ce3c-db10-4076-89cb-5d313138dd38",
+    "3f859b5c-e73a-4044-b49e-34bb81e96715",
+    "642c97ea-fe89-4ec9-8629-5e492ea4019d",
+    "6b0b5d24-bcda-4053-a59c-beaa1fe03b8f",
+    "6cbeead9-bb7a-40e1-8ccd-47ae60239654",
+    "752456f3-9f47-4fbf-bd44-9d131c0f41aa",
+    "7cc74598-9c1b-436b-84fa-0bf89f31adf6",
+    "caa5dddc-9290-4e27-9f5e-575ba3598614"
+  ]
+}

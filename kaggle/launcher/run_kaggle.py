@@ -54,8 +54,9 @@ def _find_reference_dir():
 def main():
     try:
         subprocess.run(["git", "clone", "--depth", "1", REPO, REPO_DIR], check=True)
+        requirements = "requirements.txt" if os.environ.get("KAGGLE_EXPERIMENT_MODE", "pilot") == "legacy" else "environments/requirements-training.txt"
         subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-r", f"{REPO_DIR}/requirements.txt"],
+            [sys.executable, "-m", "pip", "install", "-r", f"{REPO_DIR}/{requirements}"],
             check=True,
         )
 
