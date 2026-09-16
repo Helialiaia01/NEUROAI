@@ -23,7 +23,7 @@ from xcebra_ibl.configs.config import (
     DATA_RAW_DIR, DATA_PROCESSED_DIR, SPSDT,
     MIN_FIRING_RATE, MAX_SILENT_PROB, MIN_NEURONS, UNIT_LABEL_MIN,
     MIN_TRIALS, REMOVE_BLOCK5, GAUSSIAN_SMOOTH_SIGMA,
-    TRANSFORM_MFR, STANDARDIZE_Y, STANDARDIZE_X,
+    TRANSFORM_MFR, STANDARDIZE_Y, STANDARDIZE_X, NEURAL_SCALE_FLOOR_FRACTION,
     AREAS_EXCLUDE, VARIABLE_NAMES, DISCRETE_VARIABLE_NAMES,
 )
 
@@ -38,6 +38,23 @@ def _session_id(npz_path):
         # Current local export: data_{eid}.npz
         return stem[len("data_"):]
     return stem
+
+
+def _safe_neural_scale(y_3d, fit_trials, floor_fraction):
+    """Fit training-only per-time scales with a pooled-neuron fallback."""
+    mean_y = np.mean(y_3d[fit_trials], axis=0)
+    raw_std_y = np.std(y_3d[fit_trials], axis=0)
+    pooled_std_y = np.std(y_3d[fit_trials], axis=(0, 1))
+    std_y_floor = np.maximum(1e-8, floor_fraction * pooled_std_y)
+    low_variance_bins = raw_std_y < std_y_floor[None, :]
+    return (
+        mean_y,
+        np.maximum(raw_std_y, std_y_floor[None, :]),
+        raw_std_y,
+        pooled_std_y,
+        np.broadcast_to(std_y_floor, raw_std_y.shape),
+        low_variance_bins,
+    )
 
 
 # ──────────────────────────────────────────────────────
@@ -394,11 +411,16 @@ def preprocess_session(
 
     # Z-score per neuron per time bin
     if standardize_y:
-        mean_y = np.mean(y_3d[fit_trials], axis=0)  # (T, N)
-        std_y = np.std(y_3d[fit_trials], axis=0)    # (T, N)
-        std_y = np.clip(std_y, 1e-8, None)
+        (mean_y, std_y, raw_std_y, pooled_std_y, std_y_floor,
+         low_variance_bins) = _safe_neural_scale(
+            y_3d, fit_trials, NEURAL_SCALE_FLOOR_FRACTION
+        )
     else:
         mean_y = np.zeros(y_3d.shape[1:])
+        raw_std_y = np.ones(y_3d.shape[1:])
+        pooled_std_y = np.ones(y_3d.shape[2])
+        std_y_floor = np.ones(y_3d.shape[1:])
+        low_variance_bins = np.zeros(y_3d.shape[1:], dtype=bool)
         std_y = np.ones(y_3d.shape[1:])
     y_3d = (y_3d - mean_y) / std_y
 
@@ -472,6 +494,11 @@ def preprocess_session(
             "Cosmos": clusters_g.get("Cosmos", np.array([])),
             "mean_y_TN": mean_y,
             "std_y_TN": std_y,
+            "raw_std_y_TN": raw_std_y,
+            "pooled_std_y_N": pooled_std_y,
+            "std_y_floor_TN": np.broadcast_to(std_y_floor, std_y.shape),
+            "low_variance_y_bins": low_variance_bins,
+            "neural_scale_floor_fraction": float(NEURAL_SCALE_FLOOR_FRACTION),
             "mean_X_Tv": mean_X,
             "std_X_Tv": std_X,
             "best_delays": best_delays,

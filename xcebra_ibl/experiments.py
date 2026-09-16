@@ -338,6 +338,7 @@ def main(argv=None):
     config['preprocessing'] = {key:getattr(defaults,key) for key in (
         'MIN_TRIALS','MIN_NEURONS','MIN_FIRING_RATE','MAX_SILENT_PROB','UNIT_LABEL_MIN',
         'GAUSSIAN_SMOOTH_SIGMA','STANDARDIZE_Y','STANDARDIZE_X','TRANSFORM_MFR','SPSDT','REMOVE_BLOCK5')}
+    config['preprocessing']['NEURAL_SCALE_FLOOR_FRACTION'] = defaults.NEURAL_SCALE_FLOOR_FRACTION
     config['method'] = 'regularized_cebra_adaptation'
     config['dimension_selection'] = 'mean_validation_decoding; stability reported separately'
     config['target_support'] = {

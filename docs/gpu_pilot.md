@@ -35,6 +35,13 @@ areas are explicitly selected by default. QC records raw identities, retained
 counts, class coverage, units and outcome semantics. This is offline decoding:
 symmetric smoothing and neural temporal context can use future bins.
 
+Neural activity is standardized per neuron and time bin using training trials.
+When a time bin has negligible training variation, its scale falls back to 10%
+of that neuron's pooled training scale. The raw scale, fallback scale and affected
+bins are saved in `preprocessing.npz`; this prevents rare held-out spikes from
+being amplified by an unstable near-zero denominator while preserving the
+per-time-bin scaling where it is supported by the training data.
+
 Training windows use centre-preserving replication at each trial edge, matching
 inference. Continuous label differences use within-trial transitions only.
 Decoding uses interior bins. Matched neural-context Ridge/logistic baselines and

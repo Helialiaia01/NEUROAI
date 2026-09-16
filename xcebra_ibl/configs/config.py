@@ -92,6 +92,10 @@ GAUSSIAN_SMOOTH_SIGMA = 2.0  # bins (= 20 ms)
 TRANSFORM_MFR = None          # None | "sqrt" | "log"
 STANDARDIZE_Y = True
 STANDARDIZE_X = True
+# Per-time-bin neural scaling is retained where supported by the training
+# trials. Near-zero bins fall back to a fraction of that neuron's pooled
+# training scale instead of amplifying rare held-out spikes.
+NEURAL_SCALE_FLOOR_FRACTION = 0.1
 
 # Areas to exclude
 AREAS_EXCLUDE = ["root", "void", "y"]

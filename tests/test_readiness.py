@@ -96,6 +96,24 @@ class ReadinessTests(unittest.TestCase):
                 expected=np.stack([x[i-1:i+2].ravel() for i in np.flatnonzero(mask & interior)])
                 np.testing.assert_array_equal(features[part],expected)
 
+    def test_neural_scale_floor_handles_near_zero_time_bin_variance(self):
+        from xcebra_ibl.configs.config import NEURAL_SCALE_FLOOR_FRACTION
+        from xcebra_ibl.data.preprocess import _safe_neural_scale
+
+        training = np.zeros((4, 3, 1), dtype=float)
+        training[:, 0, 0] = [0.0, 0.1, 0.2, 0.3]
+        training[:, 1, 0] = 1.0  # no within-training variation at this bin
+        training[:, 2, 0] = [0.0, 1.0, 0.0, 1.0]
+        _, safe_std, raw_std, _, floor, low_variance = _safe_neural_scale(
+            training, np.arange(4), NEURAL_SCALE_FLOOR_FRACTION
+        )
+
+        self.assertGreater(safe_std[1, 0], 1e-8)
+        self.assertEqual(safe_std.shape, raw_std.shape)
+        self.assertTrue(low_variance[1, 0])
+        self.assertEqual(floor.shape, raw_std.shape)
+        self.assertTrue(np.isfinite(safe_std).all())
+
     def test_reserved_cohort_and_fixed_dimension_enforced(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory)
