@@ -43,8 +43,15 @@ def interval(y, pred, trials, discrete, draws, seed, baseline=None, unit="held_o
     rng = np.random.default_rng(seed)
     groups = [np.flatnonzero(trials == t) for t in np.unique(trials)]
     scores, differences = [], []
+    classes = np.unique(y) if discrete else None
+    missing_class_draws = 0
     for _ in range(draws if len(groups)>1 else 0):
         idx = np.concatenate([groups[i] for i in rng.integers(len(groups), size=len(groups))])
+        # A draw missing a reference class estimates a different macro recall.
+        # Keep whole-trial sampling and report exclusions; never impute recall.
+        if discrete and not np.array_equal(np.unique(y[idx]), classes):
+            missing_class_draws += 1
+            continue
         value = score(y[idx], pred[idx], discrete)
         if value is not None:
             scores.append(value)
@@ -54,6 +61,9 @@ def interval(y, pred, trials, discrete, draws, seed, baseline=None, unit="held_o
                     differences.append(value-base_value)
     result = dict(score=score(y, pred, discrete), ci95=np.quantile(scores, [.025, .975]).tolist() if scores else None,
                   valid_bootstraps=len(scores), n_resampling_units=len(groups), unit=unit, metric='balanced_accuracy' if discrete else 'r2')
+    result.update(requested_bootstraps=draws,
+                  missing_class_bootstraps=missing_class_draws,
+                  bootstrap_class_policy='require_all_reference_classes' if discrete else None)
     if baseline is not None:
         base_score = score(y, baseline, discrete)
         result.update(baseline_score=base_score,

@@ -62,8 +62,12 @@ def gaussian_test(profiles, config):
     rng = np.random.default_rng(config.seed)
     # The full search/reproducibility filter is repeated on every Gaussian draw.
     covariance = np.atleast_2d(np.cov(X, rowvar=False))
-    null = [best_clustering(rng.multivariate_normal(X.mean(axis=0), covariance, len(X)),
-                           config, config.seed+i+1)['silhouette'] for i in range(config.null_draws)]
+    null = []
+    for i in range(config.null_draws):
+        null.append(best_clustering(rng.multivariate_normal(X.mean(axis=0), covariance, len(X)),
+                                   config, config.seed+i+1)['silhouette'])
+        if (i+1) % 10 == 0 or i+1 == config.null_draws:
+            print(f'  Gaussian null draws: {i+1}/{config.null_draws}', flush=True)
     p = (1+sum(value >= observed['silhouette'] for value in null))/(1+len(null))
     return dict(observed, p_value=float(p), null_silhouettes=null, minimum_p=1/(config.null_draws+1))
 
@@ -154,6 +158,8 @@ def compare_published(table, path, variables):
 
 
 def analyze(input_dir, output, config, rrr=None):
+    if output.exists() and any(output.iterdir()):
+        raise ValueError('Analysis destination must be empty; preserve previous results')
     output.mkdir(parents=True, exist_ok=True)
     tables, tests = [], []
     for directory in sorted(input_dir.iterdir()):
@@ -162,12 +168,14 @@ def analyze(input_dir, output, config, rrr=None):
         if verified(directory, 'session_complete.json').get('status') == 'skipped':
             continue
         table, variables, profiles, seeds, ridge = collect_session(directory)
+        print(f'Analyzing session {directory.name}: {len(table)} neurons', flush=True)
         tables.append(table)
         for area in sorted(table.acronym.unique()):
             mask = table.acronym.to_numpy()==area
             if mask.sum() < config.min_neurons:
                 continue
             for method, values in [('regularized_cebra_adaptation', profiles), ('local_ridge',ridge)]:
+                print(f'  Area {area}, {method}, {int(mask.sum())} neurons', flush=True)
                 result = gaussian_test(values[mask], config)
                 result.update(eid=directory.name, area=area, method=method, neurons=int(mask.sum()), variables=variables)
                 if method=='regularized_cebra_adaptation' and result['k'] and len(seeds)>1:
@@ -195,6 +203,9 @@ def analyze(input_dir, output, config, rrr=None):
     if rrr:
         variables = [c[len('xcebra_attr_'):] for c in numeric if c.startswith('xcebra_attr_')]
         write_json(output/'published_rrr_comparison.json',compare_published(combined,rrr,variables))
+    write_json(output/'analysis_complete.json', dict(status='complete', sessions=len(tables),
+               tests=len(tests), config=asdict(config), input=str(input_dir.resolve())))
+    print(f'Analysis complete: {len(tables)} sessions, {len(tests)} tests; {output}', flush=True)
 
 
 def main():

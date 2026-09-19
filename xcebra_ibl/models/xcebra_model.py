@@ -516,11 +516,11 @@ class XCEBRAModel:
         """
         Compute per-neuron attribution maps via Jacobian computation.
 
-        For each variable group g and each neuron n, compute:
-            A_{g,n} = E_x[‖∂f_g/∂x_n‖²]
-
-        This gives the xCEBRA analog of the RRR selectivity:
-        instead of |β_{n,v,t}|, we get the mean squared Jacobian.
+        Average the signed encoder Jacobian over the temporal window, compute
+        its pseudoinverse, then average absolute inverse entries over samples
+        and the requested output dimensions. These are local inverse
+        sensitivities in standardized input coordinates, not RRR coefficients
+        or a variable's unique causal effect.
 
         Parameters
         ----------
@@ -593,6 +593,8 @@ class XCEBRAModel:
         never crosses a trial boundary.
         """
         neural_data = np.asarray(neural_data, dtype=np.float32)
+        if n_samples < 1:
+            raise ValueError('Attribution requires at least one sample')
         if self.models_:
             fitted_model = next(iter(self.models_.values()))
         else:
@@ -647,8 +649,9 @@ class XCEBRAModel:
         For each sample x, computes the encoder Jacobian J = ∂f(x)/∂x,
         averages over the temporal receptive field, computes the Moore-Penrose
         pseudo-inverse J⁺, and averages |J⁺| across output dimensions and
-        samples. This is the attribution defined by xCEBRA; it is distinct
-        from a squared forward gradient.
+        samples. This follows the signed temporal-mean inverse-Jacobian
+        variant in CEBRA 0.6, with an explicit relative SVD cutoff. It does
+        not by itself establish the identifiability assumptions of xCEBRA.
 
         Parameters
         ----------
@@ -661,6 +664,12 @@ class XCEBRAModel:
         -------
         attributions : (n_features,) mean absolute inverted-gradient score
         """
+        if batch_size < 1 or len(data) == 0:
+            raise ValueError('Attribution requires nonempty data and a positive batch size')
+        if not 0 < self.jacobian_pinv_rcond < 1:
+            raise ValueError('jacobian_pinv_rcond must be between zero and one')
+        if not np.isfinite(data).all():
+            raise ValueError('Attribution inputs must be finite')
         # Access the underlying PyTorch model
         solver = cebra_model.solver_
         net = solver.model
@@ -686,24 +695,18 @@ class XCEBRAModel:
             if batch_np.ndim == 3:
                 batch = torch.tensor(batch_np, dtype=torch.float32, device=device)
             elif "offset" in self.model_architecture:
-                # This path is retained for callers that provide 2D data
-                # directly. New session analysis uses explicit windows above.
-                batch = torch.tensor(
-                    batch_np.T[None, ...], dtype=torch.float32, device=device
-                )
+                raise ValueError('Temporal attribution requires explicit trial-safe 3D windows')
             else:
                 batch = torch.tensor(batch_np, dtype=torch.float32, device=device)
             batch.requires_grad_(True)
 
             embedding = net(batch)
             if embedding.ndim == 3:
-                # A receptive-field window should produce one center output;
-                # averaging is a safe compatibility path for older CEBRA
-                # versions that return a singleton temporal dimension.
-                embedding = embedding.mean(dim=-1)
-
-            if output_slice is not None:
-                embedding = embedding[:, output_slice[0] : output_slice[1]]
+                if embedding.shape[-1] != 1:
+                    raise ValueError('Each attribution window must produce exactly one center output')
+                embedding = embedding.squeeze(-1)
+            if output_slice is not None and not (0 <= output_slice[0] < output_slice[1] <= embedding.shape[1]):
+                raise ValueError('Invalid attribution output slice')
 
             # Compute one exact output basis per batch.  The exact Jacobian is
             # required before taking its pseudo-inverse; a Hutchinson sketch
@@ -750,6 +753,10 @@ class XCEBRAModel:
             jacobian = grads.permute(1, 0, 2).detach().cpu().numpy()
             jacobian = np.asarray(jacobian, dtype=np.float64)
             inverted = np.linalg.pinv(jacobian, rcond=self.jacobian_pinv_rcond)
+            # Invert the full joint Jacobian before selecting output coordinates.
+            # Inverting a sliced Jacobian answers a different inverse problem.
+            if output_slice is not None:
+                inverted = inverted[:, :, output_slice[0]:output_slice[1]]
             if not np.isfinite(inverted).all():
                 raise FloatingPointError("Non-finite inverted Jacobian")
             accumulated_inverse += np.abs(inverted).mean(axis=2).sum(axis=0)

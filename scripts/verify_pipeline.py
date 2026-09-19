@@ -39,6 +39,13 @@ def main():
     assert verified(root/'merged'/'fixture_excluded','session_complete.json')['status']=='skipped'
     assert len(json.loads((root/'merged'/'merge_manifest.json').read_text())['skipped_sessions'])==1
     analyze(root/'merged',root/'analysis',ClusterConfig(min_neurons=6,null_draws=9))
+    assert json.loads((root/'analysis'/'analysis_complete.json').read_text())['sessions'] == 2
+    try:
+        analyze(root/'merged',root/'analysis',ClusterConfig(min_neurons=6,null_draws=9))
+    except ValueError as exc:
+        assert 'destination must be empty' in str(exc)
+    else:
+        raise AssertionError('Analysis must not overwrite existing results')
     write_json(root/'verification.json',dict(status='passed',sessions=2,explicitly_excluded_sessions=1,encoder_fits=32,iterations_per_fit=3,
         checks=['workers','same-config resume','artifact integrity','manifest provenance','subject aggregation','explicit exclusions','offline analysis'],
         scientific_result=False))

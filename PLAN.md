@@ -61,6 +61,16 @@ historical figures are not automatically promoted to final thesis evidence.
 
 ## Open external and scientific verification
 
+Update 19 September: Loki calibration, the corrected three-session pilot and
+merged offline analysis have completed. The historical checklist below is
+superseded for those execution milestones by
+[the pilot review](docs/pilot_review_2026-09-19.md). Scientific acceptance,
+attribution validation and full-cohort dispatch remain pending.
+
+The subsequent [attribution audit and training readiness decision](docs/training_readiness_2026-09-19.md)
+records the tested numerical corrections, synthetic limitations and the prepared
+48-fit calibration launcher. Full-cohort scientific acceptance remains open.
+
 - [ ] Confirm compute host, login/VPN, scheduler/allocation, GPU/VRAM, storage and
   wall-time limits. The NAS invitation alone does not establish compute access.
 - [ ] Build/test Linux/CUDA, check numerical warnings, execute real kernels and
