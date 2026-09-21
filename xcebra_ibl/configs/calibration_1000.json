@@ -1,4 +1,4 @@
 {
   "description": "Bounded exploratory calibration only: three seeds, fixed dimension 4, 1000 iterations, observed plus one retrained null. Use one already exploratory session; this is not a full-cohort launch or a confirmatory result.",
-  "arguments": ["--seeds", "2025", "2026", "2027", "--dimensions", "4", "--iterations", "1000", "--areas", "cortical", "--device", "cuda", "--bootstrap", "500", "--nulls", "1", "--regularization", "0.01"]
+  "arguments": ["--seeds", "2025", "2026", "2027", "--dimensions", "4", "--iterations", "1000", "--areas", "cortical", "--device", "cuda", "--bootstrap", "500", "--nulls", "1", "--regularization", "0.01", "--attribution-samples", "1024", "--attribution-seed", "42"]
 }

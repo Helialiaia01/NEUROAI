@@ -15,7 +15,7 @@ from scipy.signal import lfilter
 from sklearn.metrics import roc_auc_score
 import torch
 
-from xcebra_ibl.models.xcebra_model import XCEBRAModel
+from xcebra_ibl.models.xcebra_model import XCEBRAModel, _project_normalized_jacobian
 from xcebra_ibl.experiment.evaluation import split_trials
 from xcebra_ibl.experiment.artifacts import write_json, sha256
 
@@ -58,6 +58,10 @@ def audit(source, output):
             full = backend.compute_jacobian(fitted.solver_.model, [x], cuda_device='cpu')
             # Match float32 temporal reduction, then invert in float64 as in the runner.
             jac = full.mean(-1).astype('float64')
+            if getattr(fitted.solver_.model, 'normalize', False):
+                with torch.no_grad():
+                    z = fitted.solver_.model(torch.tensor(data)).reshape(len(data), -1).numpy()
+                jac = _project_normalized_jacobian(jac, z)
             inverse = np.stack([scipy.linalg.pinv(j, rtol=model.jacobian_pinv_rcond) for j in jac])
             reference = np.abs(inverse).mean(axis=(0, 2))
             actual = model._jacobian_attribution(fitted, data, batch_size=31)
@@ -83,6 +87,7 @@ def audit(source, output):
         reference_sha256=sha256(backend_path), model_sha256=model_hashes,
         synthetic_report_sha256=sha256(source/'report.json'),
         interpretation='Exploratory sensitivity audit on the same synthetic generator. '
+                       'The reference Jacobian also receives the explicit normalized-tangent safeguard. '
                        'Variants are not independently validated replacements. '
                        'Numerical agreement does not establish biological identifiability.'))
 

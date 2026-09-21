@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import numpy as np
 import torch
 
-from xcebra_ibl.models.xcebra_model import XCEBRAModel
+from xcebra_ibl.models.xcebra_model import XCEBRAModel, _project_normalized_jacobian
 
 
 def wrapped(net):
@@ -12,6 +12,17 @@ def wrapped(net):
 
 
 class AttributionAuditTests(unittest.TestCase):
+    def test_radial_roundoff_cannot_create_false_inverse_direction(self):
+        # Analytic derivative of x / ||x|| at x=(0,0,2), with a spurious
+        # radial derivative large enough to survive the relative pinv cutoff.
+        true = np.diag([.5, .5, 0.])[None]
+        noisy = true.copy()
+        noisy[0, 2, 2] = 1e-5
+        projected = _project_normalized_jacobian(noisy, [[0., 0., 1.]])
+        np.testing.assert_allclose(projected, true)
+        np.testing.assert_allclose(np.linalg.pinv(projected, rcond=1e-5), np.diag([2.,2.,0.])[None])
+        self.assertGreater(np.linalg.pinv(noisy,rcond=1e-5)[0,2,2], 99999)
+
     def test_joint_inverse_is_selected_after_inversion(self):
         net = torch.nn.Linear(2, 2, bias=False)
         with torch.no_grad():

@@ -35,6 +35,22 @@ from xcebra_ibl.models.trials import (
 from xcebra_ibl.experiment.artifacts import write_json, complete, verified
 
 
+def _project_normalized_jacobian(jacobian, embedding):
+    """Enforce z.T J = 0 for a unit-norm encoder, removing radial roundoff.
+
+    A normalized D-dimensional output has tangent rank at most D-1. Tiny
+    float32 radial derivatives can survive a relative pinv threshold when the
+    true tangent derivatives are small, producing an enormous false inverse.
+    This projection is an identity in exact arithmetic for normalized encoders.
+    """
+    z = np.asarray(embedding, dtype=np.float64)
+    norms = np.linalg.norm(z, axis=1, keepdims=True)
+    if not np.isfinite(norms).all() or np.any(norms == 0):
+        raise FloatingPointError('Invalid normalized embedding')
+    z = z / norms
+    return jacobian - z[:, :, None] * np.einsum('bd,bdn->bn', z, jacobian)[:, None, :]
+
+
 
 class XCEBRAModel:
     """
@@ -85,6 +101,7 @@ class XCEBRAModel:
         random_seed: int = RANDOM_SEED,
         use_xcebra: bool = True,
         recovery_dir: Optional[str] = None,
+        attribution_seed: int = 42,
     ):
         self.embedding_dim_per_group = embedding_dim_per_group
         self.n_groups = N_VARIABLES
@@ -104,6 +121,12 @@ class XCEBRAModel:
         self.jacobian_n_proj = jacobian_n_proj
         self.jacobian_pinv_rcond = jacobian_pinv_rcond
         self.random_seed = random_seed
+        if attribution_seed < 0:
+            raise ValueError('attribution_seed must be nonnegative')
+        self.attribution_seed = attribution_seed
+        self.attribution_centers_ = None
+        self.attribution_diagnostics_ = {}
+        self.last_attribution_diagnostics_ = None
         self.use_xcebra = use_xcebra
         self.recovery_dir = Path(recovery_dir) if recovery_dir else None
         self.training_diagnostics_ = {}
@@ -560,6 +583,7 @@ class XCEBRAModel:
             print(f"  Computing Jacobian attribution for: {var_name}")
             attr = self._jacobian_attribution(model, data_subset, batch_size)
             attribution_maps[var_name] = attr  # (n_neurons,)
+            self.attribution_diagnostics_[var_name] = dict(self.last_attribution_diagnostics_)
 
         return attribution_maps
 
@@ -622,12 +646,13 @@ class XCEBRAModel:
         if valid_centers.size == 0:
             raise ValueError("No valid attribution centers remain inside trial boundaries")
         count = min(int(n_samples), valid_centers.size)
-        rng = np.random.default_rng(self.random_seed)
+        rng = np.random.default_rng(self.attribution_seed)
         centers = (
             valid_centers
             if count == valid_centers.size
             else rng.choice(valid_centers, size=count, replace=False)
         )
+        self.attribution_centers_ = centers.copy()
         if left == 0 and right == 1:
             return neural_data[centers]
         windows = np.stack(
@@ -688,6 +713,7 @@ class XCEBRAModel:
         n_features = data.shape[1]
         accumulated_inverse = np.zeros(n_features, dtype=np.float64)
         n_accumulated = 0
+        ranks, sample_mass = [], []
 
         for start_idx in range(0, n_samples, batch_size):
             end_idx = min(start_idx + batch_size, n_samples)
@@ -752,6 +778,10 @@ class XCEBRAModel:
                 grads = grads.mean(dim=-1)
             jacobian = grads.permute(1, 0, 2).detach().cpu().numpy()
             jacobian = np.asarray(jacobian, dtype=np.float64)
+            if getattr(net, 'normalize', False):
+                jacobian = _project_normalized_jacobian(jacobian, embedding.detach().cpu().numpy())
+            singular = np.linalg.svd(jacobian, compute_uv=False)
+            ranks.extend((singular > self.jacobian_pinv_rcond * singular[:, :1]).sum(axis=1).tolist())
             inverted = np.linalg.pinv(jacobian, rcond=self.jacobian_pinv_rcond)
             # Invert the full joint Jacobian before selecting output coordinates.
             # Inverting a sliced Jacobian answers a different inverse problem.
@@ -759,11 +789,23 @@ class XCEBRAModel:
                 inverted = inverted[:, :, output_slice[0]:output_slice[1]]
             if not np.isfinite(inverted).all():
                 raise FloatingPointError("Non-finite inverted Jacobian")
+            sample_mass.extend(np.abs(inverted).sum(axis=(1, 2)).tolist())
             accumulated_inverse += np.abs(inverted).mean(axis=2).sum(axis=0)
             n_accumulated += len(inverted)
 
         # Weight samples equally, including an incomplete final batch.
         attributions = accumulated_inverse / max(n_accumulated, 1)
+        mass = np.asarray(sample_mass)
+        self.last_attribution_diagnostics_ = dict(
+            samples=n_accumulated, rcond=self.jacobian_pinv_rcond,
+            normalized_tangent_projection=bool(getattr(net, 'normalize', False)),
+            effective_rank_min=int(min(ranks)), effective_rank_max=int(max(ranks)),
+            effective_rank_median=float(np.median(ranks)),
+            zero_rank_samples=int(np.count_nonzero(np.asarray(ranks) == 0)),
+            largest_sample_mass_fraction=float(mass.max()/mass.sum()) if mass.sum() else None,
+            interpretation='Rank refers to the full temporally averaged Jacobian. '
+                           'Sample mass is summed absolute inverse magnitude; concentration is '
+                           'a sensitivity diagnostic, not a validated reliability threshold.')
         return attributions
 
     def compute_selectivity_profiles(
@@ -847,6 +889,7 @@ class XCEBRAModel:
         # Save metadata
         meta = {
             "method": "regularized_cebra_adaptation",
+            "attribution_numerics": "normalized_tangent_projection_v1",
             "embedding_dim_per_group": self.embedding_dim_per_group,
             "n_groups": self.n_groups,
             "total_dim": self.total_dim,
@@ -858,6 +901,7 @@ class XCEBRAModel:
             "jacobian_n_proj": self.jacobian_n_proj,
             "jacobian_pinv_rcond": self.jacobian_pinv_rcond,
             "random_seed": self.random_seed,
+            "attribution_seed": self.attribution_seed,
             "batch_size": self.batch_size,
             "learning_rate": self.learning_rate,
             "temperature": self.temperature,
@@ -887,6 +931,8 @@ class XCEBRAModel:
                 if key in metadata:
                     setattr(self, key, metadata[key])
             self.label_classes_ = metadata.get("label_classes", {})
+            # Preserve historical sampling when loading pre-policy checkpoints.
+            self.attribution_seed = metadata.get('attribution_seed', metadata.get('random_seed', 42))
         self.models_ = {}
         # Load per-variable models
         for var_name in VARIABLE_NAMES:

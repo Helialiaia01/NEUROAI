@@ -71,6 +71,12 @@ The subsequent [attribution audit and training readiness decision](docs/training
 records the tested numerical corrections, synthetic limitations and the prepared
 48-fit calibration launcher. Full-cohort scientific acceptance remains open.
 
+The [21 September corrections](docs/attribution_fixes_2026-09-21.md) fix a verified
+normalized-Jacobian roundoff failure and separate attribution sampling from
+training randomness. Saved-model tests confirm improved numerical repeatability;
+between-model neuron-rank stability remains weak, so full-cohort acceptance is
+still open.
+
 - [ ] Confirm compute host, login/VPN, scheduler/allocation, GPU/VRAM, storage and
   wall-time limits. The NAS invitation alone does not establish compute access.
 - [ ] Build/test Linux/CUDA, check numerical warnings, execute real kernels and

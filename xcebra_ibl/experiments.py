@@ -140,6 +140,7 @@ def run_session(path, out, args):
                         groups=blocks[splits['train']] if args.shuffle == 'within_block' else None)
                 model = XCEBRAModel(embedding_dim_per_group=dim, max_iterations=args.iterations,
                     batch_size=args.batch_size, device=args.device, random_seed=seed,
+                    attribution_seed=args.attribution_seed,
                     checkpoint_dir=destination / 'checkpoints', checkpoint_frequency=args.checkpoint_frequency,
                     checkpoint_retention=1, recovery_dir=destination / "recovery",
                     learning_rate=args.learning_rate, temperature=args.temperature,
@@ -167,6 +168,11 @@ def run_session(path, out, args):
                 attr = model.compute_attribution_maps(session['y_2d'][masks['test']], n_samples=args.attribution_samples,
                     trial_ids=session['trial_ids'][masks['test']], time_ids=session['time_ids'][masks['test']], trial_length=T)
                 np.savez_compressed(destination / 'attributions.npz', **attr)
+                write_json(destination / 'attribution_diagnostics.json', model.attribution_diagnostics_)
+                centers = model.attribution_centers_
+                np.savez_compressed(destination / 'attribution_samples.npz',
+                    centers=centers, trial_ids=session['trial_ids'][masks['test']][centers],
+                    time_ids=session['time_ids'][masks['test']][centers])
                 losses = {v: np.asarray(loss).reshape(-1).tolist() for v, loss in model.training_losses_.items()}
                 if any(not np.isfinite(loss).all() for loss in losses.values()):
                     raise ValueError('Non-finite training loss')
@@ -220,6 +226,11 @@ def stability(out, candidates, variables, T, left, right):
     for (ka, a), (kb, b) in combinations(observed, 2):
         if a['dimension'] != b['dimension']:
             continue
+        sample_paths = [out / k / 'attribution_samples.npz' for k in (ka, kb)]
+        same_samples = None
+        if all(p.exists() for p in sample_paths):
+            with np.load(sample_paths[0]) as sa, np.load(sample_paths[1]) as sb:
+                same_samples = all(np.array_equal(sa[key], sb[key]) for key in ('trial_ids', 'time_ids'))
         with np.load(out / ka / 'embeddings.npz') as ea, np.load(out / kb / 'embeddings.npz') as eb, np.load(out / ka / 'attributions.npz') as aa, np.load(out / kb / 'attributions.npz') as ab:
             for v in variables:
                 av, bv = ea[f'validation_{v}'], eb[f'validation_{v}']
@@ -230,7 +241,8 @@ def stability(out, candidates, variables, T, left, right):
                 rho = spearmanr(aa[v], ab[v]).statistic
                 result.append(dict(variable=v, dimension=a['dimension'], seeds=[a['seed'], b['seed']],
                     aligned_test_r2=float(r2_score(bt[it], align.predict(at[it]))),
-                    attribution_spearman=float(rho) if np.isfinite(rho) else None))
+                    attribution_spearman=float(rho) if np.isfinite(rho) else None,
+                    attribution_samples_identical=same_samples))
     return result
 
 
@@ -280,7 +292,9 @@ def main(argv=None):
     p.add_argument('--nulls', type=int, default=1)
     p.add_argument('--bootstrap', type=int, default=500)
     p.add_argument('--batch-size', type=int, default=512)
-    p.add_argument('--attribution-samples', type=int, default=256)
+    p.add_argument('--attribution-samples', type=int, default=1024)
+    p.add_argument('--attribution-seed', type=int, default=42,
+                   help='Shared sampling seed across encoders; independent of training seed')
     p.add_argument('--checkpoint-frequency', type=int, default=100)
     p.add_argument('--split-seed', type=int, default=42)
     p.add_argument('--device', default='cuda_if_available',
@@ -306,7 +320,7 @@ def main(argv=None):
             p.error(f'{name} must be positive')
     if len(set(args.seeds)) != len(args.seeds) or len(set(args.dimensions)) != len(args.dimensions):
         p.error('Seeds and dimensions must be unique')
-    if min(args.seeds)<0 or args.split_seed<0:
+    if min(args.seeds)<0 or args.split_seed<0 or args.attribution_seed<0:
         p.error('Seeds must be nonnegative')
     if args.nulls < 1 or min(args.dimensions) < 2:
         p.error('At least one null and dimensions >=2 required')
@@ -352,7 +366,9 @@ def main(argv=None):
     config['input_units'] = 'firing_rate_hz_reference_export'
     config['maximum_firing_rate_filter'] = None
     config['architecture'] = 'offset10-model'
-    config['attribution'] = dict(method='mean_abs_pinv_of_time_averaged_jacobian', rcond=1e-5, n_proj=-1, batch_size=256)
+    config['attribution'] = dict(method='mean_abs_pinv_of_time_averaged_jacobian', rcond=1e-5, n_proj=-1, batch_size=256,
+                                sampling_seed=args.attribution_seed, sampling_policy='shared_centers_across_models',
+                                numerics='normalized_tangent_projection_v1')
     config['area_inclusion'] = CORTICAL_AREAS if args.areas=='cortical' else None
     manifest = dict(runtime=dict(cuda=torch.version.cuda, device=args.device, requested_device=requested_device,
                     gpu=torch.cuda.get_device_name(0) if torch.cuda.is_available() else None), config=config, sources=fingerprints, code_sha256=code_hash.hexdigest(),

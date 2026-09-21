@@ -36,6 +36,8 @@ def main():
     assert all(row['scores']['ci95'] is None for row in rows)
     for eid in ('fixture_a','fixture_b'):
         assert verified(root/'merged'/eid,'session_complete.json')
+        stability = json.loads((root/'merged'/eid/'stability.json').read_text())
+        assert stability and all(r['attribution_samples_identical'] for r in stability)
     assert verified(root/'merged'/'fixture_excluded','session_complete.json')['status']=='skipped'
     assert len(json.loads((root/'merged'/'merge_manifest.json').read_text())['skipped_sessions'])==1
     analyze(root/'merged',root/'analysis',ClusterConfig(min_neurons=6,null_draws=9))
