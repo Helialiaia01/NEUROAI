@@ -169,6 +169,8 @@ class XCEBRAModel:
             import cebra
             state = model._prepare_fit(neural_data, y)
             base_solver, encoder, loader, is_multisession = state
+            from .randomness import seed_loader_generators
+            seed_loader_generators(loader, torch.initial_seed())
             if is_multisession:
                 raise ValueError("Regularized xCEBRA requires single-session input")
             if self.trial_ids_ is not None:

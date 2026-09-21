@@ -77,28 +77,38 @@ training randomness. Saved-model tests confirm improved numerical repeatability;
 between-model neuron-rank stability remains weak, so full-cohort acceptance is
 still open.
 
-- [ ] Confirm compute host, login/VPN, scheduler/allocation, GPU/VRAM, storage and
-  wall-time limits. The NAS invitation alone does not establish compute access.
-- [ ] Build/test Linux/CUDA, check numerical warnings, execute real kernels and
-  measure calibration cost. Local NumPy 2.2.0/2.2.6 warnings remain unresolved;
-  an optional 2.4.1 test install was blocked by automatic approval review.
-- [ ] Validate attribution on longer learned synthetic experiments. The current
-  100-iteration diagnostic has AUROC 0.47–0.78 and is not reliable support recovery.
+The [multiobjective benchmark and sampler correction](docs/multiobjective_benchmark_2026-09-21.md)
+adds a separate official-solver prototype and fixes CEBRA private sampler seeds.
+Fresh smoke runs repeat exactly after the correction; prior global seeds alone
+did not guarantee replay of historical training. The corrected full pipeline
+integration and 42 regression tests pass locally.
+
+- [x] Confirm Loki login, two P6000 GPUs and writable HDD storage. User authorized
+  assuming no allocation limits unless the supervisor advises otherwise.
+- [x] Execute Linux/CUDA training and measure calibration cost; the 48-fit
+  calibration completed in 69.1 minutes. Local and Loki numerical regression
+  tests passed after the 21 September attribution correction.
+- [ ] Validate learned attribution. The 1,000-step adaptation diagnostic and
+  real-data cross-seed checks do not yet establish reliable neuron recovery.
+  Compare the official multiobjective solver on predefined synthetic graphs
+  before integrating it into the IBL runner.
 - [ ] Obtain verified subject IDs before animal-level inference; refreeze the
   cohort if changing the split unit to animal. Current reservation is session-level.
 - [ ] Obtain the actual published RRR export if direct published-result comparison
   is required. The public LFS media check returned 404; local baselines stay separate.
-- [ ] Run one-session GPU calibration, then the controlled 1–3-session pilot.
-  Freeze design/iterations using training and validation evidence before reserved
-  confirmatory evaluation and full-cohort analysis. The 3-session default grid is
-  432 encoder fits before exclusions; do not infer its budget from a CPU smoke.
+- [x] Run one-session GPU calibration and the controlled three-session pilot
+  (432 encoder fits); both completed. Their completion is not scientific acceptance.
+- [ ] Freeze design/iterations using training and validation evidence before
+  reserved confirmatory evaluation and full-cohort analysis.
 - [ ] Promote findings to thesis results only after convergence, observed/null
   comparisons, uncertainty, stability and interpretation checks are saved.
 
 ## Handoff
 
-Local pre-GPU implementation is complete. No full GPU run, biological attribution
-validation or published RRR replication is claimed. Changes are in the working
-tree; a remote launcher that clones GitHub will need the reviewed changes pushed
-before use. NAS account metadata remains in a local Git-ignored note; no password
-is included in project documentation.
+GPU pilot and calibration execution are complete; full-cohort dispatch remains
+on hold because learned neuron attribution is not yet sufficiently validated.
+Production numerical fixes through commit 297df6f were tested locally and on
+Loki. The subsequent multiobjective benchmark is a separate synthetic prototype.
+No biological attribution validation or published RRR replication is claimed.
+NAS account metadata remains in a local Git-ignored note; no password is included
+in project documentation.
