@@ -82,6 +82,10 @@ adds a separate official-solver prototype and fixes CEBRA private sampler seeds.
 Fresh smoke runs repeat exactly after the correction; prior global seeds alone
 did not guarantee replay of historical training. The corrected full pipeline
 integration and 42 regression tests pass locally.
+The corrected synthetic benchmark is complete: multiobjective decoding improves
+on the redundant graph, but mean support AUROC does not (0.701 versus 0.708).
+The same tests pass on Loki. No production model replacement or full-cohort
+dispatch is justified by this small benchmark.
 
 - [x] Confirm Loki login, two P6000 GPUs and writable HDD storage. User authorized
   assuming no allocation limits unless the supervisor advises otherwise.

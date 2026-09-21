@@ -77,3 +77,39 @@ The earlier interrupted benchmark directory is exploratory and superseded; it
 must not be pooled with corrected outputs. Existing IBL fits are still completed
 observations, but their claimed deterministic replay was not established. This
 does not by itself explain or repair poor cross-model attribution stability.
+
+## Completed results and decision
+
+The corrected benchmark completed in 318.3 seconds on CPU: eight family/seed/graph
+conditions, twelve encoder fits, sixteen variable-level evaluations. All expected
+rows and attribution arrays passed completeness and finite-value checks. The
+summary records artifact SHA256 hashes and an exported support-recovery figure.
+
+| Graph | Model family | Mean support AUROC (range) | Mean test decoding R² |
+| --- | --- | --- | --- |
+| Anchor | Adaptation | 1.000 (1.000–1.000) | 0.708 |
+| Anchor | Multiobjective | 1.000 (1.000–1.000) | 0.703 |
+| Redundant | Adaptation | 0.708 (0.556–0.917) | 0.756 |
+| Redundant | Multiobjective | 0.701 (0.528–0.833) | 0.845 |
+
+These means summarize two latents and two seeds, not four independent biological
+replicates. On redundant data, average precision is 0.726 versus 0.803, while
+cross-seed rank correlations are 0.343/0.490 versus 0.748/0.252 for the two latents.
+There is no consistent improvement across recovery metrics and variables.
+Anchor full-rank correlations include eleven irrelevant neurons; low agreement
+among their ranks does not negate perfect identification of the single signal
+neuron. Support recovery and full-ranking repeatability answer different questions.
+
+The candidate improves decoding on this redundant graph but does not reliably
+separate connected from disconnected neurons across seeds. Do not replace the
+production model or launch the full cohort based on these results. Further
+method validation should use additional independently generated graphs and
+predefined support/group-level perturbation checks before a small IBL pilot.
+Avoid repeatedly tuning against the same synthetic test sequence. The thesis
+can report the observed distinction between decoding and attribution, with these
+limitations, without claiming biological neuron identification.
+
+Verification also includes a passing end-to-end CPU pipeline integration and
+42 passing tests on both Mac and Loki. The code correction was pushed and
+deployed as `d7d50df`; no new GPU training was launched. Existing IBL artifacts
+were preserved. The user's two local utility scripts remain uncommitted.
