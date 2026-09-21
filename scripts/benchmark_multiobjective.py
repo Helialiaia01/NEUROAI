@@ -8,6 +8,7 @@ from pathlib import Path
 import cebra
 import numpy as np
 import torch
+import joblib
 from scipy.signal import lfilter
 from sklearn.metrics import average_precision_score, r2_score, roc_auc_score
 from cebra.data.datasets import DatasetxCEBRA
@@ -23,8 +24,8 @@ from xcebra_ibl.models.xcebra_model import XCEBRAModel
 from xcebra_ibl.models.randomness import seed_loader_generators
 
 
-def generate(graph):
-    rng = np.random.default_rng(872)
+def generate(graph, data_seed=872):
+    rng = np.random.default_rng(data_seed)
     weights = np.zeros((2, 12))
     if graph == 'anchor':
         weights[0, 0] = weights[1, 6] = 1
@@ -102,6 +103,38 @@ def attribution(net, x):
     return inverse
 
 
+def perturbation_check(net, group, prepared, targets, values, support, decoder):
+    """Rank on validation only; freeze encoder/decoder for test mean-masking.
+
+    These are model sensitivity checks, not biological interventions. Zero is
+    the training neural mean. No decoder is refit after a group is masked.
+    """
+    k = int(np.count_nonzero(support))
+    order = np.argsort(values, kind='stable')
+    groups = dict(top=order[-k:], bottom=order[:k], connected=np.flatnonzero(support),
+                  disconnected=np.flatnonzero(~support))
+    rng = np.random.default_rng(4102)
+    random_groups = [rng.choice(len(values), k, replace=False) for _ in range(99)]
+    x = prepared['test'][0]
+
+    def score(indices):
+        masked = x.clone()
+        masked[:, indices, :] = 0
+        with torch.no_grad():
+            embedding = torch.cat([net(b).reshape(len(b), -1)[:, group] for b in masked.split(128)]).numpy()
+        return float(r2_score(targets['test'], decoder.predict(embedding)))
+
+    baseline = score([])
+    drops = {name: baseline-score(indices) for name, indices in groups.items()}
+    random_drops = [baseline-score(indices) for indices in random_groups]
+    return dict(baseline_r2=baseline, group_size=k,
+        selected_neurons={name: indices.tolist() for name, indices in groups.items()},
+        r2_drop=drops, random_r2_drops=random_drops,
+        top_exceeds_random_median=bool(drops['top'] > np.median(random_drops)),
+        top_exceeds_bottom=bool(drops['top'] > drops['bottom']),
+        note='Validation-ranked, frozen-model test sensitivity to training-mean masking; not a causal or significance test.')
+
+
 def run(args):
     if args.output.exists() and any(args.output.iterdir()):
         raise ValueError('Output must be empty')
@@ -110,10 +143,11 @@ def run(args):
     torch.use_deterministic_algorithms(True)
     started, rows = time.monotonic(), []
     write_json(args.output/'design.json', dict(iterations=args.iterations, seeds=args.seeds,
-        graphs=args.graphs, cebra=cebra.__version__, torch=torch.__version__, source_sha256=sha256(Path(__file__)),
+        graphs=args.graphs, data_seed=args.data_seed, perturbations=args.perturbations,
+        cebra=cebra.__version__, torch=torch.__version__, source_sha256=sha256(Path(__file__)),
         caveat='Family comparison: two separate 2D encoders with constant regularization versus one 8D joint encoder with ramped regularization. Unequal capacity/objectives; no isolated causal claim. One fixed data seed, no IBL data.'))
     for graph in args.graphs:
-        neural, latent, weights = generate(graph)
+        neural, latent, weights = generate(graph, args.data_seed)
         np.savez_compressed(args.output/f'{graph}_data.npz', weights=weights,
             **{f'x_{p}': x for p, x in neural.items()}, **{f'z_{p}': z for p, z in latent.items()})
         for seed in args.seeds:
@@ -146,14 +180,22 @@ def run(args):
                         features = {p: torch.cat([net(b).reshape(len(b), -1)[:, group]
                             for b in x.split(128)]).numpy() for p, (x, _) in prepared.items()}
                     targets = {p: latent[p][c, i] for p, (_, c) in prepared.items()}
-                    result = decode(features, targets, False, include_knn=False)['linear']
+                    result = decode(features, targets, False, include_knn=False,
+                                    save_dir=destination, prefix=f'decoder_{i}')['linear']
                     values = np.abs(attribution(net, prepared['test'][0])[:, :, group]).mean(axis=(0, 2))
                     np.save(destination/f'attribution_{i}.npy', values)
-                    rows.append(dict(graph=graph, seed=seed, family=family, latent=i,
+                    row = dict(graph=graph, seed=seed, family=family, latent=i,
                         auroc=float(roc_auc_score(weights[i] != 0, values)),
                         average_precision=float(average_precision_score(weights[i] != 0, values)),
                         validation_r2=result['validation_score'],
-                        test_r2=float(r2_score(targets['test'], result['prediction']))))
+                        test_r2=float(r2_score(targets['test'], result['prediction'])))
+                    if args.perturbations:
+                        validation_values = np.abs(attribution(net, prepared['validation'][0])[:, :, group]).mean(axis=(0, 2))
+                        np.save(destination/f'validation_attribution_{i}.npy', validation_values)
+                        row['perturbation'] = perturbation_check(net, group, prepared, targets,
+                            validation_values, weights[i] != 0,
+                            joblib.load(destination/f'decoder_{i}_linear.joblib'))
+                    rows.append(row)
                 write_json(args.output/'progress.json', dict(results=rows, seconds=time.monotonic()-started))
                 print(f'Completed {destination.name}: {time.monotonic()-started:.1f}s total', flush=True)
     write_json(args.output/'report.json', dict(status='complete', results=rows, seconds=time.monotonic()-started))
@@ -163,6 +205,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--iterations', type=int, default=1000)
+    parser.add_argument('--data-seed', type=int, default=872)
+    parser.add_argument('--perturbations', action='store_true')
     parser.add_argument('--seeds', type=int, nargs='+', default=[2025, 2026])
     parser.add_argument('--graphs', choices=['anchor', 'redundant'], nargs='+', default=['anchor', 'redundant'])
     args = parser.parse_args()
