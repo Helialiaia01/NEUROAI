@@ -87,6 +87,14 @@ on the redundant graph, but mean support AUROC does not (0.701 versus 0.708).
 The same tests pass on Loki. No production model replacement or full-cohort
 dispatch is justified by this small benchmark.
 
+The subsequent [fresh-data and neuron-masking validation](docs/independent_validation_2026-09-21.md)
+supports a deadline-aware thesis run. The existing adaptation passed the
+predefined sensitivity direction in 7/8 fresh cases and the multiobjective
+prototype in 8/8, but the latter is not yet an IBL-ready production pipeline.
+Proceed with 48 frozen exploratory sessions using decoding as the primary result
+and attribution as exploratory sensitivity. Keep all 41 confirmatory sessions
+reserved.
+
 - [x] Confirm Loki login, two P6000 GPUs and writable HDD storage. User authorized
   assuming no allocation limits unless the supervisor advises otherwise.
 - [x] Execute Linux/CUDA training and measure calibration cost; the 48-fit

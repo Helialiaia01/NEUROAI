@@ -248,6 +248,21 @@ class AnalysisAndJobsTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 prepare(cohort,study,root/'other','exploratory')
 
+    def test_job_limit_preserves_frozen_cohort_order(self):
+        from xcebra_ibl.jobs import prepare
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            cohort=root/'cohort.json';study=root/'study.json'
+            cohort.write_text(json.dumps({'sessions':[
+                {'eid':'e2','phase':'exploratory'}, {'eid':'held','phase':'confirmatory'},
+                {'eid':'e1','phase':'exploratory'}, {'eid':'e3','phase':'exploratory'}]}))
+            study.write_text(json.dumps({'arguments':['--device','cuda']}))
+            payload=prepare(cohort,study,root/'plan','exploratory',2)
+            self.assertEqual([job['eid'] for job in payload['jobs']],['e2','e1'])
+            self.assertEqual(payload['session_limit'],2)
+            with self.assertRaises(ValueError):
+                prepare(cohort,study,root/'bad','exploratory',0)
+
     def test_one_resampling_unit_has_no_confidence_interval(self):
         y=np.arange(10,dtype=float)
         result=interval(y,y,np.zeros(10),False,20,0,baseline=y*0)

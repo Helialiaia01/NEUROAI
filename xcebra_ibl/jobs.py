@@ -12,19 +12,26 @@ import threading
 from xcebra_ibl.experiment.artifacts import write_json, sha256, verified
 
 
-def prepare(cohort_path, study_path, output, phase):
+def prepare(cohort_path, study_path, output, phase, limit=None):
     cohort = json.loads(cohort_path.read_text())
     study = json.loads(study_path.read_text())
     forbidden = {'--output','--session-ids','--cohort','--phase','--data-dir'}
     if any(token.split('=',1)[0] in forbidden for token in study['arguments']):
         raise ValueError('Study arguments cannot override job paths or cohort selection')
+    selected = [row for row in cohort['sessions'] if row['phase'] == phase]
+    if limit is not None:
+        if limit < 1:
+            raise ValueError('Session limit must be positive')
+        selected = selected[:limit]
     jobs = [{'eid':row['eid'], 'arguments': ['--session-ids',row['eid'],'--phase',phase]+study['arguments']}
-            for row in cohort['sessions'] if row['phase']==phase]
+            for row in selected]
     if len({j['eid'] for j in jobs}) != len(jobs) or not jobs:
         raise ValueError('Empty or duplicate job sessions')
     output.mkdir(parents=True, exist_ok=True)
     payload = dict(cohort_sha256=sha256(cohort_path), study_sha256=sha256(study_path), jobs=jobs,
-        rationale='Each session keeps its full candidate grid together: preprocessing/baselines run once and dimension selection uses all seeds.')
+        phase=phase, session_limit=limit,
+        selection='First eligible sessions in the frozen cohort order; no outcome-based selection.',
+        rationale='Each session keeps its full candidate grid together: preprocessing/baselines run once and all seeds use the fixed dimension.')
     path = output/'jobs.json'
     if path.exists() and json.loads(path.read_text()) != payload:
         raise ValueError('Existing job manifest differs; use a new directory')
@@ -154,6 +161,8 @@ def main():
     p.add_argument('--study',type=Path,required=True)
     p.add_argument('--output',type=Path,required=True)
     p.add_argument('--phase',choices=['exploratory','confirmatory'],default='exploratory')
+    p.add_argument('--limit',type=int,
+                   help='Take the first N sessions in frozen cohort order')
     for action in ('run','merge','dispatch'):
         p=commands.add_parser(action)
         p.add_argument('--manifest',type=Path,required=True)
@@ -169,7 +178,7 @@ def main():
                            help='GPU UUIDs assigned to independent workers')
     args=parser.parse_args()
     if args.action=='prepare':
-        result=prepare(args.cohort,args.study,args.output,args.phase)
+        result=prepare(args.cohort,args.study,args.output,args.phase,args.limit)
         print(f"Prepared {len(result['jobs'])} session jobs; nothing submitted")
     elif args.action=='run':
         run(args.manifest,args.index,args.data_dir,args.root)

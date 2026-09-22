@@ -1,0 +1,4 @@
+{
+  "description": "Time-bounded thesis exploratory study: first 48 sessions in frozen cohort order; fixed dimension chosen before this run from completed calibration; held-out decoding primary, attribution exploratory.",
+  "arguments": ["--seeds", "2025", "2026", "2027", "--dimensions", "4", "--iterations", "1000", "--areas", "cortical", "--device", "cuda", "--bootstrap", "500", "--nulls", "1", "--regularization", "0.01", "--attribution-samples", "1024", "--attribution-seed", "42"]
+}
