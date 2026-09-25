@@ -27,8 +27,9 @@ from xcebra_ibl.configs.config import (
     MIN_DELTA_R2,
     RESULTS_DIR, CORTICAL_AREAS, DATA_PROCESSED_DIR,
     ALLEN_AREA_LIST_CSV, ALLEN_CONN_MATRIX_CSV,
-    RRR_RESULTS_DEFAULT,
+    RRR_RESULTS_DEFAULT, BRAINWIDE_RRR_REPO,
 )
+from xcebra_ibl.analysis.rrr_reference import read_rrr_metadata, read_rrr_magnitudes
 
 
 def _load_allen_anatomy_from_csv():
@@ -76,7 +77,7 @@ def _compute_local_linear_baseline(min_neurons=50):
     """
     Compute a local linear selectivity baseline from preprocessed sessions.
 
-    This serves as a practical fallback when the original RRRglobal_full.json
+    This serves as a practical fallback when the published RRR_selectivity.json
     artifact is not available (e.g., Git-LFS pointer only).
     """
     from sklearn.linear_model import Ridge
@@ -398,7 +399,7 @@ def compare_with_rrr(
     ----------
     xcebra_sel_areas : (n_areas, 8)
     xcebra_area_order : list
-    rrr_df_path : str, path to RRRglobal_full.json (optional)
+    rrr_df_path : str, path to the published RRR_selectivity.json (optional)
     min_neurons : int
 
     Returns
@@ -411,9 +412,9 @@ def compare_with_rrr(
     rrr_df_path = Path(rrr_df_path)
 
     if not rrr_df_path.exists():
-        # Fallback: search under brainwide-RRR for a matching result file
+        # Fallback: search under the configured repository for the published file.
         fallback_candidates = list(
-            rrr_df_path.parent.parent.parent.rglob("RRRglobal_full.json")
+            BRAINWIDE_RRR_REPO.rglob("RRR_selectivity.json")
         )
         if fallback_candidates:
             rrr_df_path = fallback_candidates[0]
@@ -461,7 +462,7 @@ def compare_with_rrr(
         pass
 
     try:
-        rrr_df = pd.read_json(str(rrr_df_path))
+        rrr_df = read_rrr_metadata(rrr_df_path)
     except Exception as e:
         print(f"Could not parse RRR results at {rrr_df_path}: {e}")
         if allow_local_fallback:
@@ -480,27 +481,19 @@ def compare_with_rrr(
         print("Comparison with RRR will be skipped.")
         return None
 
-    # Compute RRR selectivity (same as step3_analyze_selectivity.py)
-    required_rrr = {"RRRglobal_r2", "meanact_r2", "RRRglobal_beta", "acronym"}
-    missing_rrr = required_rrr.difference(rrr_df.columns)
-    if missing_rrr:
-        raise ValueError(f"RRR artifact is missing columns: {sorted(missing_rrr)}")
-    rrr_df["RRRglobal_deltaR2"] = rrr_df["RRRglobal_r2"] - rrr_df["meanact_r2"]
+    # Match Fig. 2c-d in the authors' released code: delta R2 against the
+    # time-only null, then sum absolute time-resolved coefficients.
+    rrr_df["RRR_deltaR2"] = rrr_df["RRR_r2"] - rrr_df["null_r2"]
     nis_incmask = (
-        (rrr_df["RRRglobal_deltaR2"] > MIN_DELTA_R2)
+        (rrr_df["RRR_deltaR2"] > MIN_DELTA_R2)
         & rrr_df["acronym"].isin(CORTICAL_AREAS)
     )
 
-    beta_values = rrr_df.loc[nis_incmask, "RRRglobal_beta"].tolist()
-    if not beta_values:
+    selected_rows = rrr_df.loc[nis_incmask, "_rrr_row"].tolist()
+    if not selected_rows:
         return {"message": "No RRR neurons passed the delta-R2 threshold"}
-    coef_vs = np.asarray([np.asarray(b)[:-1] for b in beta_values], dtype=float)
-    if coef_vs.ndim != 3 or coef_vs.shape[1] != N_VARIABLES:
-        raise ValueError(
-            "Unexpected RRRglobal_beta shape after removing the intercept: "
-            f"{coef_vs.shape}; expected (*, {N_VARIABLES}, time)"
-        )
-    rrr_sel_per_neuron = np.abs(coef_vs).sum(2)  # (n_neurons, 8)
+    magnitudes = read_rrr_magnitudes(rrr_df_path, selected_rows, N_VARIABLES)
+    rrr_sel_per_neuron = np.stack([magnitudes[str(row)] for row in selected_rows])
 
     # Build per-area selectivity for RRR (same filtering)
     rrr_acronyms = rrr_df.loc[nis_incmask, "acronym"].values

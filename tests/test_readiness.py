@@ -226,12 +226,15 @@ class AnalysisAndJobsTests(unittest.TestCase):
         for i,u in enumerate(['d','a','c','b']):
             value={'a':1,'b':2,'c':3,'d':4}[u]
             beta=np.zeros((9,3));beta[0]=value;beta[-1]=100-value
-            rows.append(dict(eid='s',uuids=u,acronym='VISp',RRRglobal_beta=beta.tolist(),RRRglobal_r2=.5,meanact_r2=.1))
+            rows.append(dict(eid='s',uuids=u,acronym='VISp',RRR_beta=beta.tolist(),
+                             RRR_r2=.5,null_r2=(.49 if u=='d' else .1)))
         with tempfile.TemporaryDirectory() as directory:
             p=Path(directory)/'rrr.json';p.write_text(json.dumps(rows))
             result=compare_published(table,p,['block'])
-            self.assertAlmostEqual(result['variables']['block'],1.)
-            self.assertEqual(result['matched_neurons'],4)
+            self.assertAlmostEqual(result['neuron_level']['variables']['block'],1.)
+            self.assertEqual(result['matched_neurons'],3)
+            self.assertEqual(result['matched_neurons_before_published_filter'],4)
+            self.assertEqual(result['rrr_selectivity'],'sum_over_time(abs(RRR_beta)); intercept excluded')
 
     def test_job_preparation_and_merge_fail_on_incomplete_worker(self):
         from xcebra_ibl.jobs import prepare,merge

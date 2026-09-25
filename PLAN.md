@@ -4,6 +4,17 @@
 plan](cluster/LOKI_PLAN.md). Approved with user edits; execution is in progress. The completed implementation
 record below is preserved.
 
+**Current decision, 25 September:** the initial 48-session study and its offline
+analysis are complete. The remaining 157 sessions are running under `nohup` on
+both P6000 GPUs (95/116 exploratory sessions complete at the latest check; the
+41 reserved confirmatory sessions follow automatically). Dr Shuqi Wang supplied
+the published `RRR_selectivity.json` and authoritative code. The comparison now
+uses the released schema, the published `RRR_r2 - null_r2 > 0.015` filter and
+sum-over-time absolute coefficient magnitude for comparison with unsigned
+Jacobian attribution. This is a post-training analysis correction and does not
+require restarting the CEBRA run. See
+[published RRR integration](docs/published_rrr_integration_2026-09-25.md).
+
 Updated and reviewed: 9 September 2026. Scope: complete locally verifiable
 scientific and engineering fixes before GPU activation. Existing data and
 historical outputs are preserved. No NAS login or GPU job was attempted.
@@ -106,8 +117,12 @@ reserved.
   before integrating it into the IBL runner.
 - [ ] Obtain verified subject IDs before animal-level inference; refreeze the
   cohort if changing the split unit to animal. Current reservation is session-level.
-- [ ] Obtain the actual published RRR export if direct published-result comparison
-  is required. The public LFS media check returned 404; local baselines stay separate.
+- [x] Obtain and verify the published RRR export. The Git-LFS media artifact contains
+  59,820 neurons across 178 sessions and has SHA-256
+  `e73993443982e3df5c0d0c86c7f032ce1cdeddf1d5f18fa16804d19df1442042`.
+  Exact-unit comparison remains limited by IBL spike-sorting version changes;
+  session-balanced area-level comparison is therefore the main published-result
+  comparison, while local Ridge remains the matched decoding baseline.
 - [x] Run one-session GPU calibration and the controlled three-session pilot
   (432 encoder fits); both completed. Their completion is not scientific acceptance.
 - [ ] Freeze design/iterations using training and validation evidence before
@@ -117,10 +132,10 @@ reserved.
 
 ## Handoff
 
-GPU pilot and calibration execution are complete; full-cohort dispatch remains
-on hold because learned neuron attribution is not yet sufficiently validated.
-Production numerical fixes through commit 297df6f were tested locally and on
-Loki. The subsequent multiobjective benchmark is a separate synthetic prototype.
-No biological attribution validation or published RRR replication is claimed.
-NAS account metadata remains in a local Git-ignored note; no password is included
-in project documentation.
+GPU pilot, calibration and the first 48-session study are complete. The remaining
+157-session run is active on Loki. Decoding and its matched linear baseline remain
+the primary performance result; neuron attribution and agreement with the
+published RRR selectivity structure remain secondary analyses with explicit
+stability and multiple-testing controls. The current run should finish before any
+optional exact-data sensitivity study is considered. NAS account metadata remains
+in a local Git-ignored note; no password is included in project documentation.

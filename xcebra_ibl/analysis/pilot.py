@@ -14,6 +14,7 @@ from scipy.stats import spearmanr
 from sklearn.cluster import KMeans
 from sklearn.metrics import adjusted_rand_score, silhouette_score
 from xcebra_ibl.experiment.artifacts import verified, write_json, sha256
+from xcebra_ibl.analysis.rrr_reference import read_rrr_metadata, read_rrr_magnitudes
 
 
 @dataclass
@@ -124,37 +125,94 @@ def collect_session(directory):
 
 
 def compare_published(table, path, variables):
-    """Require genuine published columns and join by session + neuron UUID."""
-    with path.open() as handle:
-        prefix = handle.read(100)
-    if prefix.startswith('version https://git-lfs.github.com/spec'):
-        raise ValueError('RRR input is a Git-LFS pointer, not model results')
-    try:
-        reference = pd.read_json(path)
-    except ValueError as exc:
-        raise ValueError('RRR input is not a valid results table') from exc
-    required = {'eid','uuids','acronym','RRRglobal_beta','RRRglobal_r2','meanact_r2'}
-    if not required.issubset(reference):
-        raise ValueError(f'Missing published RRR columns: {sorted(required-set(reference))}')
+    """Compare unsigned CEBRA attribution with published RRR magnitude.
+
+    Exact UUID matches support a neuron-level analysis. A separate area-level
+    analysis uses the complete published artifact and session-balanced local
+    profiles, so it remains informative when public IBL spike-sorting versions
+    yield different unit UUIDs.
+    """
+    from xcebra_ibl.configs.config import VARIABLE_NAMES
+    reference = read_rrr_metadata(path)
     if reference.duplicated(['eid','uuids']).any() or table.duplicated(['eid','uuids']).any():
         raise ValueError('Ambiguous neuron identities in RRR comparison')
     matched = table[table.uuids.ne('')].merge(reference, on=['eid','uuids'], suffixes=('', '_rrr'), validate='one_to_one')
-    if matched.empty or not np.all(matched.acronym == matched.acronym_rrr):
-        raise ValueError('No identity-matched neurons, or brain-area identity mismatch')
-    # Keep the published performance filter explicit; no local fallback.
-    matched = matched[(matched.RRRglobal_r2-matched.meanact_r2) > .015]
-    from xcebra_ibl.configs.config import VARIABLE_NAMES
-    beta = np.array(matched.RRRglobal_beta.tolist())
-    # Reference schema is neuron x (variables + intercept) x time.
-    if beta.ndim != 3 or beta.shape[1] != len(VARIABLE_NAMES)+1:
-        raise ValueError('Expected published beta shape: neurons x 9 x time')
-    coefficients = np.abs(beta[:,:-1,:]).mean(axis=2)
+    matched_before_filter = len(matched)
+    if not matched.empty and not np.all(matched.acronym.astype(str) == matched.acronym_rrr.astype(str)):
+        raise ValueError('Brain-area identity mismatch among UUID-matched neurons')
+    matched['RRR_deltaR2'] = matched.RRR_r2-matched.null_r2
+    matched = matched[matched.RRR_deltaR2 > .015].copy()
+    reference['RRR_deltaR2'] = reference.RRR_r2-reference.null_r2
+    eligible = reference[reference.RRR_deltaR2 > .015].copy()
+    magnitudes = read_rrr_magnitudes(path, eligible._rrr_row, len(VARIABLE_NAMES))
+    eligible_coefficients = np.stack([magnitudes[str(row)] for row in eligible._rrr_row])
     def correlation(a,b):
         value = float(spearmanr(a,b).statistic)
         return value if np.isfinite(value) else None
-    return dict(source='published_rrr', source_sha256=sha256(path), matched_neurons=len(matched),
-        variables={v:correlation(matched[f'xcebra_attr_{v}'], coefficients[:,VARIABLE_NAMES.index(v)])
-                   for v in variables})
+    def correlation_tests(pairs):
+        tests = {}
+        for name,(a,b) in pairs.items():
+            result = spearmanr(a,b)
+            r = float(result.statistic); p = float(result.pvalue)
+            tests[name] = dict(spearman_r=(r if np.isfinite(r) else None),
+                               p_value=(p if np.isfinite(p) else None))
+        finite = [(name,value['p_value']) for name,value in tests.items() if value['p_value'] is not None]
+        for (name,_),q in zip(finite,bh_adjust([p for _,p in finite])):
+            tests[name]['q_bh'] = q
+        return tests
+    if len(matched):
+        coefficients = np.stack([magnitudes[str(row)] for row in matched._rrr_row])
+        variable_correlations = {
+            v:correlation(matched[f'xcebra_attr_{v}'], coefficients[:,VARIABLE_NAMES.index(v)])
+            for v in variables
+        }
+        neuron_tests = correlation_tests({
+            v:(matched[f'xcebra_attr_{v}'],coefficients[:,VARIABLE_NAMES.index(v)])
+            for v in variables
+        })
+        xcebra = matched[[f'xcebra_attr_{v}' for v in variables]].to_numpy(float)
+        rrr = coefficients[:,[VARIABLE_NAMES.index(v) for v in variables]]
+    else:
+        variable_correlations = {v:None for v in variables}
+        neuron_tests = {v:dict(spearman_r=None,p_value=None) for v in variables}
+        xcebra = rrr = np.empty((0,len(variables)))
+    within_neuron = [correlation(x, r) for x,r in zip(xcebra,rrr)]
+    within_neuron = np.asarray([x for x in within_neuron if x is not None])
+    profile_columns = [f'profile_{v}' if f'profile_{v}' in table else f'xcebra_attr_{v}' for v in variables]
+    local_session_area = table.groupby(['eid','acronym'])[profile_columns].mean().reset_index()
+    local_area = local_session_area.groupby('acronym')[profile_columns].mean()
+    eligible_area = eligible[['acronym']].copy()
+    for i,v in enumerate(VARIABLE_NAMES):
+        eligible_area[v] = eligible_coefficients[:,i]
+    rrr_area = eligible_area.groupby('acronym')[variables].mean()
+    common_areas = sorted(set(local_area.index).intersection(rrr_area.index))
+    area_correlations = {
+        v:correlation(local_area.loc[common_areas,profile_columns[i]],rrr_area.loc[common_areas,v])
+        for i,v in enumerate(variables)
+    }
+    area_tests = correlation_tests({
+        v:(local_area.loc[common_areas,profile_columns[i]],rrr_area.loc[common_areas,v])
+        for i,v in enumerate(variables)
+    })
+    session_overlap = set(table.eid.astype(str)).intersection(reference.eid.astype(str))
+    return dict(source='published_rrr', source_sha256=sha256(path),
+        local_neurons=len(table), local_sessions=int(table.eid.nunique()),
+        published_neurons=len(reference), published_sessions=int(reference.eid.nunique()),
+        overlapping_sessions=len(session_overlap),
+        published_selective_neurons=len(eligible),
+        matched_neurons=len(matched), matched_neurons_before_published_filter=matched_before_filter,
+        matched_sessions=int(matched.eid.nunique()), delta_r2_threshold=.015,
+        rrr_selectivity='sum_over_time(abs(RRR_beta)); intercept excluded',
+        comparison='unsigned CEBRA Jacobian magnitude versus unsigned RRR coefficient magnitude',
+        neuron_level=dict(variables=variable_correlations, tests=neuron_tests,
+            within_neuron_profile_spearman_median=(float(np.median(within_neuron)) if len(within_neuron) else None),
+            within_neuron_profile_spearman_iqr=(np.quantile(within_neuron,[.25,.75]).tolist() if len(within_neuron) else None)),
+        area_level=dict(common_areas=len(common_areas), area_names=common_areas,
+            local_aggregation='mean within session-area, then mean sessions per area; local profiles standardized within session',
+            published_aggregation='mean coefficient magnitude across selective neurons per area',
+            variables=area_correlations, tests=area_tests,
+            correction_family='eight per-variable area-profile correlations'),
+        caveat='RRR encoding R2 and CEBRA decoding scores measure opposite prediction directions and are not compared numerically.')
 
 
 def analyze(input_dir, output, config, rrr=None):

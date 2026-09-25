@@ -44,9 +44,9 @@ ALLEN_CONN_MATRIX_CSV = BRAINWIDE_RRR_REPO / "example1" / "utils" / "conn_cxcx.c
 if REFERENCE_DIR:
     ALLEN_AREA_LIST_CSV = REFERENCE_DIR / "area_list.csv"
     ALLEN_CONN_MATRIX_CSV = REFERENCE_DIR / "conn_cxcx.csv"
-    RRR_RESULTS_DEFAULT = REFERENCE_DIR / "RRRglobal_full.json"
+    RRR_RESULTS_DEFAULT = REFERENCE_DIR / "RRR_selectivity.json"
 else:
-    RRR_RESULTS_DEFAULT = BRAINWIDE_RRR_REPO / "example1" / "trained_model" / "RRRglobal_full.json"
+    RRR_RESULTS_DEFAULT = WORKSPACE_ROOT / "data" / "reference" / "RRR_selectivity.json"
 
 for d in [DATA_RAW_DIR, DATA_PROCESSED_DIR, RESULTS_DIR, MODELS_DIR]:
     d.mkdir(parents=True, exist_ok=True)
